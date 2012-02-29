@@ -200,6 +200,66 @@ class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, S
         print res
         assert 'testlogin' in res.body, res.body
 
+    def test_login_by_email(self):
+        # create test user and set the email so we can try logging in with
+        # the email address instead of the username.
+        username = u'testlogin_by_email'
+        email = u'test_login_by_email@localhost.local'
+        password = u'letmein'
+        CreateTestData.create_user(name=username,
+                                   email=email,
+                                   password=password)
+
+        user = model.User.by_email(email)
+
+        # do the login
+        offset = url_for(controller='user', action='login')
+        res = self.app.get(offset)
+        fv = res.forms['login']
+        fv['login'] = str(email)
+        fv['password'] = str(password)
+        res = fv.submit()
+
+        # check cookies set
+        cookies = self._get_cookie_headers(res)
+        assert cookies
+
+        # first get redirected to user/logged_in
+        assert_equal(res.status, 302)
+        assert res.header('Location').startswith('http://localhost/user/logged_in') or \
+               res.header('Location').startswith('/user/logged_in')
+
+        # then get redirected to user page
+        res = res.follow()
+        assert_equal(res.status, 302)
+        assert res.header('Location') in ('http://localhost/user/testlogin_by_email',
+                                          '/user/testlogin_by_email')
+        res = res.follow()
+        assert_equal(res.status, 200)
+        assert 'testlogin_by_email is now logged in' in res.body
+        assert 'checkpoint:is-myself' in res.body
+
+        # check user object created
+        user = model.User.by_name(username)
+        assert user
+        assert_equal(user.name, username)
+        assert len(user.apikey) == 36
+
+        # check cookie created
+        cookie = res.request.environ['HTTP_COOKIE']
+        # I think some versions of webob do not produce quotes, hence the 'or'
+        assert 'ckan_display_name="testlogin_by_email"' in cookie or \
+               'ckan_display_name=testlogin_by_email' in cookie, cookie
+        assert 'auth_tkt=' in cookie, cookie
+        assert 'testlogin_by_email!userid_type:unicode' in cookie, cookie
+
+        # navigate to another page and check username still displayed
+        print res.body
+        res = res.click('Search')
+        print res
+        assert 'testlogin_by_email' in res.body, res.body
+
+
     def test_login_wrong_password(self):
         # create test user
         username = u'testloginwrong'
