@@ -610,6 +610,22 @@ With this example setting the publisher auth profile will be used.
 Defaults: The default authorisation from ``ckan/logic/auth/*`` will be used
 
 
+default group_type
+^^^^^^^^^^^^^^^^^^
+
+This settings allows you to specify the type of group to use in urls in CKAN.  This will use 
+named routes instead of controller based routes so that the urls match any values in an 
+IGroupForm implementation.  Where possible this configuration option should be set in an IGroupForm
+implementation that needs it rather than a .ini file.
+
+Example:
+    ckan.default.group_type = publisher
+
+With this set the url for add new group will be /publisher/new instead of /group/new.  
+
+Defaults: The default of 'group' will be used if it is not set.
+
+
 Plugin Settings
 ---------------
 
