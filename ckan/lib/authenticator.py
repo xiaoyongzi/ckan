@@ -23,8 +23,12 @@ class UsernamePasswordAuthenticator(object):
     def authenticate(self, environ, identity):
         if not 'login' in identity or not 'password' in identity:
             return None
+<<<<<<< HEAD
         user = User.by_name(identity.get('login')) or \
                User.by_email(identity.get('login'))
+=======
+        user = User.by_name(identity.get('login'))
+>>>>>>> master
         if user is None:
             return None
         if user.validate_password(identity.get('password')):
