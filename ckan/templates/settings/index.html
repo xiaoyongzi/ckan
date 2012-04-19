@@ -1,0 +1,91 @@
+<html xmlns:py="http://genshi.edgewall.org/"
+  xmlns:i18n="http://genshi.edgewall.org/i18n"
+  xmlns:xi="http://www.w3.org/2001/XInclude"
+  py:strip="">
+
+  <py:def function="page_title">Settings</py:def>
+  <py:def function="page_heading">Site settings</py:def>
+
+  <py:match path="primarysidebar">
+    <li class="widget-container boxed widget_text">
+      <h3>Site settings</h3>
+      <p i18n:msg="">
+        As a system administrator you are allowed to change the site title, tagline, image and
+        some of the key presentation elements within the site.
+      </p>
+      <p i18n:msg="">
+        This form allows you to change the settings which will take effect immediately on update.
+      </p>
+    </li>
+  </py:match>
+
+  <div py:match="content">
+      <form class="form-horizontal well">
+          <fieldset>
+              <legend>Settings</legend>
+              <div class="control-group">
+                  <label class="control-label" for="input01">Logo url</label>
+                  <div class="controls">
+                      <div class="input-prepend">
+                      <span class='add-on'>http://</span><input type="text" class="input-xlarge" id="input01"/>
+                      </div>
+                      <p class="help-block">The image loaded from this URL should be 145x120 px</p>
+                  </div>
+              </div>
+
+              <div class="control-group">
+                  <label class="control-label" for="input01">Site name</label>
+                  <div class="controls">
+                      <input type="text" class="input-xlarge" id="input01"/>
+                  </div>
+              </div>
+              <div class="control-group">
+                  <label class="control-label" for="input01">Tag line</label>
+                  <div class="controls">
+                      <input type="text" class="input-xlarge" id="input01"/>
+                  </div>
+              </div>
+
+          </fieldset>
+          <fieldset>
+              <legend>CSS</legend>
+              <div class="control-group">
+                  <label class="control-label" for="input01">Header background</label>
+                  <div class="controls">
+                      <div class="input-prepend">
+                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="input01"/>
+                      </div>
+                      <p class="help-block">The CSS hex value for the header</p>
+                  </div>
+              </div>
+
+              <div class="control-group">
+                  <label class="control-label" for="input01">Background</label>
+                  <div class="controls">
+                      <div class="input-prepend">
+                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="input01"/>
+                      </div>
+                      <p class="help-block">The CSS hex value for the main background</p>
+                  </div>
+              </div>
+
+              <div class="control-group">
+                  <label class="control-label" for="input01">Footer background</label>
+                  <div class="controls">
+                      <div class="input-prepend">
+                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="input01"/>
+                      </div>
+                      <p class="help-block">The CSS hex value for the footer</p>
+                  </div>
+              </div>
+          </fieldset>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save changes</button>
+            <button class="btn">Cancel</button>
+          </div>
+      </form>
+  </div>
+
+  <xi:include href="../layout.html" />
+</html>

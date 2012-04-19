@@ -151,6 +151,9 @@ def make_map():
     ##map.connect('/package/new', controller='package_formalchemy', action='new')
     ##map.connect('/package/edit/{id}', controller='package_formalchemy', action='edit')
 
+    with SubMapper(map, controller='settings') as m:
+        m.connect('/settings', action='index')
+
     with SubMapper(map, controller='package') as m:
         m.connect('/dataset', action='search')
         m.connect('/dataset/{action}',
