@@ -39,14 +39,14 @@
               <div class="control-group ${ 'error' if errors.get('name', '') else '' }">
                   <label class="control-label" for="input01">Site name</label>
                   <div class="controls">
-                      <input type="text" class="input-xlarge" id="name" name="name"  value="${data.get('name','')}"/>
+                      <input type="text" class="input-xlarge" id="name" name="name"  value="${data.get('name','CKAN')}"/>
                       <span class="help-inline" py:if="errors.get('name')">${errors['name']}</span>
                   </div>
               </div>
               <div class="control-group ${ 'error' if errors.get('tagline', '') else '' }">
                   <label class="control-label" for="input01">Tag line</label>
                   <div class="controls">
-                      <input type="text" class="input-xlarge" id="tagline" name="tagline"  value="${data.get('tagline','')}"/>
+                      <input type="text" class="input-xlarge" id="tagline" name="tagline"  value="${data.get('tagline','The easy way to get, use and share data')}"/>
                       <span class="help-inline" py:if="errors.get('tagline')">${errors['tagline']}</span>
                   </div>
               </div>
@@ -58,7 +58,7 @@
                   <label class="control-label" for="input01">Header background</label>
                   <div class="controls">
                       <div class="input-prepend">
-                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="css_header" name="css_header"  value="${data.get('css_header','')}"/>
+                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="css_header" name="css_header"  value="${data.get('css_header','dbdbdb')}"/>
                       </div>
                       <span class="help-inline" py:if="not errors.get('css_header')">Hexadecimal value for the header</span>
                       <span class="help-inline" py:if="errors.get('css_header')">${errors['css_header']}</span>
@@ -69,7 +69,7 @@
                   <label class="control-label" for="input01">Background</label>
                   <div class="controls">
                       <div class="input-prepend">
-                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="css_background" name="css_background"  value="${data.get('css_background','')}"/>
+                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="css_background" name="css_background"  value="${data.get('css_background','ffffff')}"/>
                       </div>
                       <span class="help-inline" py:if="not errors.get('css_background')">Hexadecimal value for the main background</span>
                       <span class="help-inline" py:if="errors.get('css_background')">${errors['css_background']}</span>
@@ -80,7 +80,7 @@
                   <label class="control-label" for="input01">Footer background</label>
                   <div class="controls">
                       <div class="input-prepend">
-                          <span class='add-on'>#</span><input type="text" class="input-xlarge" id="css_footer" name="css_footer"  value="${data.get('css_footer','')}"/>
+                          <span class='add-on'>#</span><input type="text" class="input-xlarge" id="css_footer" name="css_footer"  value="${data.get('css_footer','dbdbdb')}"/>
                       </div>
                       <span class="help-inline" py:if="not errors.get('css_footer')">Hexadecimal value for the footer</span>
                       <span class="help-inline" py:if="errors.get('css_footer')">${errors['css_footer']}</span>

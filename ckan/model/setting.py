@@ -20,7 +20,9 @@ class Setting(core.DomainObject):
 
     @classmethod
     def get_values(cls, keys):
-        pass
-
+        query = Session.query(cls)
+        for k in keys:
+            query = query.filter(cls.key == k)
+        return [ (s.key, s.value,) for s in query.all() ]
 
 meta.mapper(Setting, setting_table)
