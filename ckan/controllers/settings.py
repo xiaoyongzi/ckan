@@ -5,6 +5,7 @@ import ckan.authz as authz
 import ckan.lib.navl.dictization_functions as dictfunc
 import ckan.logic as logic
 import ckan.logic.action as action
+import ckan.model as model
 
 from ckan.lib.base import *
 from ckan.lib.helpers import url_for
