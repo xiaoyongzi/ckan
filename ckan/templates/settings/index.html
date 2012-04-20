@@ -20,7 +20,6 @@
   </py:match>
 
   <div py:match="content">
-
     <div class="alert alert-error" py:if="error_summary">
         The form contains invalid entries please correct them and submit again
     </div>
@@ -81,7 +80,7 @@
                   <label class="control-label" for="input01">Footer background</label>
                   <div class="controls">
                       <div class="input-prepend">
-                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="css_footer" name="css_footer"  value="${data.get('css_footer','')}"/>
+                          <span class='add-on'>#</span><input type="text" class="input-xlarge" id="css_footer" name="css_footer"  value="${data.get('css_footer','')}"/>
                       </div>
                       <span class="help-inline" py:if="not errors.get('css_footer')">Hexadecimal value for the footer</span>
                       <span class="help-inline" py:if="errors.get('css_footer')">${errors['css_footer']}</span>

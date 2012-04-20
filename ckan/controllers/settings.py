@@ -14,6 +14,12 @@ def _ensure_hex(key, data, errors, context):
     value = data.get(key)
 
     def is_hex(value):
+        v = ''.join(c for c in value if c != '#')
+        try:
+            x = int(v, 16)
+        except:
+            return False
+        data[key] = v
         return True
 
     if not value or not is_hex(value):
@@ -22,7 +28,6 @@ def _ensure_hex(key, data, errors, context):
         raise dictfunc.StopOnError
 
 class SettingsController(BaseController):
-    repo = model.repo
 
     def __before__(self, action, **env):
         BaseController.__before__(self, action, **env)
