@@ -279,6 +279,15 @@ def default_update_relationship_schema():
     return schema
 
 
+def default_settings_schema(hex_func):
+    return {
+        "image_url": [ignore, unicode],
+        "name"     : [not_empty, unicode],
+        "tagline"  : [not_empty, unicode],
+        "css_header"    : [ignore_missing, unicode, hex_func],
+        "css_background": [ignore_missing, unicode, hex_func],
+        "css_footer"    : [ignore_missing, unicode, hex_func],
+    }
 
 
 def default_user_schema():

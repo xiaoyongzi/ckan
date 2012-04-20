@@ -20,62 +20,71 @@
   </py:match>
 
   <div py:match="content">
-      <form class="form-horizontal well">
+
+    <div class="alert alert-error" py:if="error_summary">
+        The form contains invalid entries please correct them and submit again
+    </div>
+
+      <form class="form-horizontal well" method="POST">
           <fieldset>
               <legend>Settings</legend>
-              <div class="control-group">
+              <div class="control-group ${ 'error' if errors.get('image_url', '') else '' }">
                   <label class="control-label" for="input01">Logo url</label>
                   <div class="controls">
-                      <div class="input-prepend">
-                      <span class='add-on'>http://</span><input type="text" class="input-xlarge" id="input01"/>
-                      </div>
+                      <input type="text" class="input-xlarge" id="image_url" name="image_url" value="${data.get('image_url', g.site_url + '/img/logo.png' )}"/>
                       <p class="help-block">The image loaded from this URL should be 145x120 px</p>
+                      <span class="help-inline" py:if="errors.get('image_url')">${errors['image_url']}</span>
                   </div>
               </div>
 
-              <div class="control-group">
+              <div class="control-group ${ 'error' if errors.get('name', '') else '' }">
                   <label class="control-label" for="input01">Site name</label>
                   <div class="controls">
-                      <input type="text" class="input-xlarge" id="input01"/>
+                      <input type="text" class="input-xlarge" id="name" name="name"  value="${data.get('name','')}"/>
+                      <span class="help-inline" py:if="errors.get('name')">${errors['name']}</span>
                   </div>
               </div>
-              <div class="control-group">
+              <div class="control-group ${ 'error' if errors.get('tagline', '') else '' }">
                   <label class="control-label" for="input01">Tag line</label>
                   <div class="controls">
-                      <input type="text" class="input-xlarge" id="input01"/>
+                      <input type="text" class="input-xlarge" id="tagline" name="tagline"  value="${data.get('tagline','')}"/>
+                      <span class="help-inline" py:if="errors.get('tagline')">${errors['tagline']}</span>
                   </div>
               </div>
 
           </fieldset>
           <fieldset>
               <legend>CSS</legend>
-              <div class="control-group">
+              <div class="control-group ${ 'error' if errors.get('css_header', '') else '' }">
                   <label class="control-label" for="input01">Header background</label>
                   <div class="controls">
                       <div class="input-prepend">
-                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="input01"/>
+                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="css_header" name="css_header"  value="${data.get('css_header','')}"/>
                       </div>
-                      <p class="help-block">The CSS hex value for the header</p>
+                      <span class="help-inline" py:if="not errors.get('css_header')">Hexadecimal value for the header</span>
+                      <span class="help-inline" py:if="errors.get('css_header')">${errors['css_header']}</span>
                   </div>
               </div>
 
-              <div class="control-group">
+              <div class="control-group ${ 'error' if errors.get('css_background', '') else '' }">
                   <label class="control-label" for="input01">Background</label>
                   <div class="controls">
                       <div class="input-prepend">
-                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="input01"/>
+                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="css_background" name="css_background"  value="${data.get('css_background','')}"/>
                       </div>
-                      <p class="help-block">The CSS hex value for the main background</p>
+                      <span class="help-inline" py:if="not errors.get('css_background')">Hexadecimal value for the main background</span>
+                      <span class="help-inline" py:if="errors.get('css_background')">${errors['css_background']}</span>
                   </div>
               </div>
 
-              <div class="control-group">
+              <div class="control-group ${ 'error' if errors.get('css_footer', '') else '' }">
                   <label class="control-label" for="input01">Footer background</label>
                   <div class="controls">
                       <div class="input-prepend">
-                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="input01"/>
+                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="css_footer" name="css_footer"  value="${data.get('css_footer','')}"/>
                       </div>
-                      <p class="help-block">The CSS hex value for the footer</p>
+                      <span class="help-inline" py:if="not errors.get('css_footer')">Hexadecimal value for the footer</span>
+                      <span class="help-inline" py:if="errors.get('css_footer')">${errors['css_footer']}</span>
                   </div>
               </div>
           </fieldset>
