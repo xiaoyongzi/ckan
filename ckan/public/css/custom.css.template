@@ -1,0 +1,21 @@
+.header.outer {
+  background-color: #${ css_header } !important;
+  background-image: none;
+  margin-bottom: 18px;
+     -moz-box-shadow: none;
+  -webkit-box-shadow: none;
+          box-shadow: none;
+  border-bottom: 1px solid #ccc;
+}
+body{
+    background-color: #${ css_background } !important;
+}
+.footer.outer {
+  background-color: #${ css_footer } !important;
+  background-image: none;
+  margin-top: 18px;
+     -moz-box-shadow: none;
+  -webkit-box-shadow: none;
+          box-shadow: none;
+  border-bottom: 1px solid #ccc;
+}

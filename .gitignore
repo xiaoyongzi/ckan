@@ -9,7 +9,7 @@ sandbox/*
 theme/*
 theme
 dist
-
+ckan/public/css/custom.css
 # pylons
 development.ini*
 sstore/*

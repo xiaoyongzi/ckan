@@ -1,3 +1,4 @@
+import os
 from pylons.i18n import set_lang
 import sqlalchemy.exc
 
@@ -35,6 +36,15 @@ class SettingsController(BaseController):
         if not authz.Authorizer.is_sysadmin(c.user):
             abort(401, _('Not authorized to see this page'))
 
+    def _write_css(self, settings):
+        source = os.path.join(config['pylons.paths']['static_files'],
+                            "css/custom.css.template")
+        path = os.path.join(config['pylons.paths']['static_files'],
+                            "css/custom.css")
+
+        output = render_text(source, settings)
+        with open(path, "wb") as f:
+            f.write(output)
 
     def index(self):
         data, errors, error_summary = {}, {}, {}
@@ -60,13 +70,11 @@ class SettingsController(BaseController):
                 for f in fields:
                     model.Setting.set_value( f, data.get(f, ""), c.user )
                     success = True
+                self._apply_settings()
+                self._write_css(data)
         else:
             data = dict(model.Setting.get_values(fields))
 
         extras = { "data" : data, "error_summary" : error_summary,
                    "errors" : errors, "success" : success}
-        self._setup_template_variables()
         return render('settings/index.html',extra_vars=extras)
-
-    def _setup_template_variables(self):
-        pass

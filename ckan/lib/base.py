@@ -153,10 +153,21 @@ class BaseController(WSGIController):
     authorizer = authz.Authorizer()
     log = logging.getLogger(__name__)
 
+    def _apply_settings(self):
+        # Getting configured settings
+        settings = dict( model.Setting.get_values(["name","tagline","image_url"]) )
+        g.site_title = settings.get("name", config.get('ckan.site_title',''))
+        g.site_description = \
+            settings.get("tagline", config.get('ckan.site_description','') )
+        g.site_logo = str( settings.get("image_url",
+                                         config.get('ckan.site_logo',''))
+                         )
+
     def __before__(self, action, **params):
         c.__version__ = ckan.__version__
         self._identify_user()
         i18n.handle_request(request, c)
+        self._apply_settings()
 
     def _identify_user(self):
         '''
