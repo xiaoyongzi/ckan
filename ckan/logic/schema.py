@@ -281,7 +281,7 @@ def default_update_relationship_schema():
 
 def default_settings_schema(hex_func):
     return {
-        "image_url": [ignore, unicode],
+        "image_url": [ignore_missing, unicode],
         "name"     : [not_empty, unicode],
         "tagline"  : [not_empty, unicode],
         "css_header"    : [ignore_missing, unicode, hex_func],

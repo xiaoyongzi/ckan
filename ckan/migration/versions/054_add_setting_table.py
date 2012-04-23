@@ -8,7 +8,9 @@ def upgrade(migrate_engine):
         CREATE TABLE setting (
         	id text NOT NULL,
         	key text,
-        	value text
+        	value text,
+        	owner text,
+        	updated timestamp without time zone
         );
 
         ALTER TABLE setting

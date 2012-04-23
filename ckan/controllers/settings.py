@@ -40,7 +40,11 @@ class SettingsController(BaseController):
         data, errors, error_summary = {}, {}, {}
         context = {'model': model, 'session': model.Session,
                    'user': c.user or c.author }
+        fields = ['name', 'image_url',
+                  'tagline', 'css_header',
+                  'css_footer', 'css_background']
 
+        success = False
         if request.method == 'POST':
             td = logic.tuplize_dict( logic.parse_params(request.params) )
             unflattened = dictfunc.unflatten( td )
@@ -53,10 +57,14 @@ class SettingsController(BaseController):
                 errors = e.error_dict
                 error_summary = e.error_summary
             else:
-                # Persist the data
-                pass
+                for f in fields:
+                    model.Setting.set_value( f, data.get(f, ""), c.user )
+                    success = True
+        else:
+            data = dict(model.Setting.get_values(fields))
 
-        extras = {'data':data, 'error_summary': error_summary, "errors": errors}
+        extras = { "data" : data, "error_summary" : error_summary,
+                   "errors" : errors, "success" : success}
         self._setup_template_variables()
         return render('settings/index.html',extra_vars=extras)
 

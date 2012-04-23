@@ -20,8 +20,14 @@
   </py:match>
 
   <div py:match="content">
+    <div class="alert alert-success" py:if="success">
+        The settings have been saved
+        <a class="close" onclick="$(this).parent().hide();">&times;</a>
+    </div>
+
     <div class="alert alert-error" py:if="error_summary">
         The form contains invalid entries please correct them and submit again
+        <a class="close" onclick="$(this).parent().hide();">&times;</a>
     </div>
 
       <form class="form-horizontal well" method="POST">
