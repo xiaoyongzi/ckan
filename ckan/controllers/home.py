@@ -98,6 +98,8 @@ class HomeController(BaseController):
             except Exception, e:
                 error_msg = "<span class='inline-warning'>%s</span>" % _("Cannot render about page")
                 extra['about']  = genshi.HTML(error_msg)
+        else:
+            extra['about'] = None
         return render('home/about.html', extra_vars=extra)
 
     def cache(self, id):
