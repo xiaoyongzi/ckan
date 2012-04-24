@@ -1,3 +1,7 @@
+a, a:visited {
+    color: #${ css_linkcolor };
+    text-decoration: none;
+}
 .header.outer {
   background-color: #${ css_header } !important;
   background-image: none;

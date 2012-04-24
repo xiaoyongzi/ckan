@@ -37,7 +37,7 @@
                   <label class="control-label" for="input01">Logo url</label>
                   <div class="controls">
                       <input type="text" class="input-xlarge" id="image_url" name="image_url" value="${data.get('image_url', g.site_url + '/img/logo.png' )}"/>
-                      <p class="help-block">The image loaded from this URL should be 145x120 px</p>
+                      <p class="help-block">The image loaded from this URL should be 145 x 120px</p>
                       <span class="help-inline" py:if="errors.get('image_url')">${errors['image_url']}</span>
                   </div>
               </div>
@@ -71,6 +71,17 @@
                   </div>
               </div>
 
+              <div class="control-group ${ 'error' if errors.get('css_linkcolor', '') else '' }">
+                  <label class="control-label" for="input01">Link color</label>
+                  <div class="controls">
+                      <div class="input-prepend">
+                      <span class='add-on'>#</span><input type="text" class="input-xlarge" id="css_linkcolor" name="css_linkcolor"  value="${data.get('css_linkcolor','b22')}"/>
+                      </div>
+                      <span class="help-inline" py:if="not errors.get('css_linkcolor')">Hexadecimal value for the link color</span>
+                      <span class="help-inline" py:if="errors.get('css_linkcolor')">${errors['css_linkcolor']}</span>
+                  </div>
+              </div>
+
               <div class="control-group ${ 'error' if errors.get('css_background', '') else '' }">
                   <label class="control-label" for="input01">Background</label>
                   <div class="controls">
@@ -94,6 +105,15 @@
               </div>
           </fieldset>
 
+          <fieldset>
+              <legend>About Page</legend>
+              <div class="control-group description-field">
+                <label class="control-label" for="notes">Text</label>
+                <div class="controls">
+                  ${markdown_editor('about', data.get('about'), 'about', _('Enter some text for your about page ...'))}
+                </div>
+              </div>
+          </fieldset>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save changes</button>
             <button class="btn">Cancel</button>

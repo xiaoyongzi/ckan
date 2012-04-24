@@ -287,6 +287,8 @@ def default_settings_schema(hex_func):
         "css_header"    : [ignore_missing, unicode, hex_func],
         "css_background": [ignore_missing, unicode, hex_func],
         "css_footer"    : [ignore_missing, unicode, hex_func],
+        "css_linkcolor" : [ignore_missing, unicode, hex_func],
+        "about"    : [ignore_missing, unicode],
     }
 
 

@@ -52,7 +52,8 @@ class SettingsController(BaseController):
                    'user': c.user or c.author }
         fields = ['name', 'image_url',
                   'tagline', 'css_header',
-                  'css_footer', 'css_background']
+                  'css_footer', 'css_background',
+                  'css_linkcolor','about']
 
         success = False
         if request.method == 'POST':

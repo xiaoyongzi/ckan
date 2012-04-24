@@ -2,12 +2,16 @@
   xmlns:i18n="http://genshi.edgewall.org/i18n"
   xmlns:xi="http://www.w3.org/2001/XInclude"
   py:strip="">
-  
+
   <py:def function="page_title">About</py:def>
 
   <div py:match="content">
+    <py:if test="about">
+        ${about}
+    </py:if>
+    <py:if test="not about">
     <h2>About ${g.site_title}</h2>
-    
+
     <py:choose>
     <py:when test="not g.site_about">
 
@@ -33,6 +37,7 @@
 
     <p i18n:msg="">The <a href="http://okfn.org">Open Knowledge Foundation</a> is a non-profit organisation <a href="http://okfn.org/about/vision/">promoting</a> open knowledge: writing and improving CKAN is one of the ways we do that. If you want to get involved with its design or code, join the discussion or development <a href="http://ckan.org/contact/">mailing lists</a>, or take a look at the <a href="http://okfn.org">OKFN</a> site to find out about our other projects.</p>
 
+    </py:if>
 	</div>
 
   <xi:include href="layout.html" />

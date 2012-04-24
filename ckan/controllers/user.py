@@ -96,6 +96,7 @@ class UserController(BaseController):
         except NotFound:
             h.redirect_to(controller='user', action='login', id=None)
 
+        c.is_sysadmin = Authorizer().is_sysadmin(c.user)
         c.user_dict = user_dict
         c.is_myself = user_dict['name'] == c.user
         c.about_formatted = self._format_about(user_dict['about'])

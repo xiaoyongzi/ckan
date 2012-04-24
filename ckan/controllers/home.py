@@ -1,4 +1,5 @@
 import random
+import genshi
 
 from pylons.i18n import set_lang
 import sqlalchemy.exc
@@ -31,7 +32,7 @@ class HomeController(BaseController):
                 # TODO: send an email to the admin person (#1285)
             else:
                 raise
-            
+
 
     def index(self):
         try:
@@ -88,7 +89,16 @@ class HomeController(BaseController):
         return render('home/license.html')
 
     def about(self):
-        return render('home/about.html')
+
+        extra = dict(model.Setting.get_values(['about']))
+        if extra.get('about'):
+            try:
+                formatted = ckan.misc.MarkdownFormat().to_html(extra.get('about',''))
+                extra['about'] = genshi.HTML(formatted)
+            except Exception, e:
+                error_msg = "<span class='inline-warning'>%s</span>" % _("Cannot render about page")
+                extra['about']  = genshi.HTML(error_msg)
+        return render('home/about.html', extra_vars=extra)
 
     def cache(self, id):
         '''Manual way to clear the caches'''
