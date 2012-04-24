@@ -155,7 +155,14 @@ class BaseController(WSGIController):
 
     def _apply_settings(self):
         # Getting configured settings
-        settings = dict( model.Setting.get_values(["name","tagline","image_url"]) )
+        try:
+            settings = dict( model.Setting.get_values(
+                                        ["name","tagline","image_url"]))
+        except Exception:
+            # During tests, particularly TestDatabaseNotInitialised this
+            # fails here rather than raising a 503 later on
+            model.Session.rollback()
+            return
         g.site_title = settings.get("name", config.get('ckan.site_title',''))
         g.site_description = \
             settings.get("tagline", config.get('ckan.site_description','') )
