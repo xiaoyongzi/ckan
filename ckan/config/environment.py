@@ -1,35 +1,93 @@
 """Pylons environment configuration"""
 import os
-from urlparse import urlparse
 import logging
 import warnings
+from urlparse import urlparse
 
-from paste.deploy.converters import asbool
-
-# Suppress benign warning 'Unbuilt egg for setuptools'
-warnings.simplefilter('ignore', UserWarning) 
 import pylons
-from sqlalchemy import engine_from_config
+from paste.deploy.converters import asbool
+import sqlalchemy
 from pylons import config
-from pylons.i18n.translation import ugettext
 from genshi.template import TemplateLoader
 from genshi.filters.i18n import Translator
 
+import ckan.config.routing as routing
+import ckan.model as model
+import ckan.plugins as p
+import ckan.lib.helpers as h
+import ckan.lib.search as search
 import ckan.lib.app_globals as app_globals
-import ckan.lib.helpers
-from ckan.config.routing import make_map
-from ckan import model
-from ckan import plugins
 
+
+# Suppress benign warning 'Unbuilt egg for setuptools'
+warnings.simplefilter('ignore', UserWarning)
+
+class _Helpers(object):
+    ''' Helper object giving access to template helpers stopping
+    missing functions from causing template exceptions. Useful if
+    templates have helper functions provided by extensions that have
+    not been enabled. '''
+    def __init__(self, helpers, restrict=True):
+        functions = {}
+        allowed = helpers.__allowed_functions__
+        # list of functions due to be depreciated
+        self.depreciated = []
+
+        for helper in dir(helpers):
+            if helper not in allowed:
+                self.depreciated.append(helper)
+                if restrict:
+                    continue
+            functions[helper] = getattr(helpers, helper)
+        self.functions = functions
+
+        # extend helper functions with ones supplied by plugins
+        extra_helpers = []
+        for plugin in p.PluginImplementations(p.ITemplateHelpers):
+            helpers = plugin.get_helpers()
+            for helper in helpers:
+                if helper in extra_helpers:
+                    raise Exception('overwritting extra helper %s' % helper)
+                extra_helpers.append(helper)
+                functions[helper] = helpers[helper]
+        # logging
+        self.log = logging.getLogger('ckan.helpers')
+
+    @classmethod
+    def null_function(cls, *args, **kw):
+        ''' This function is returned if no helper is found. The idea is
+        to try to allow templates to be rendered even if helpers are
+        missing.  Returning the empty string seems to work well.'''
+        return ''
+
+    def __getattr__(self, name):
+        ''' return the function/object requested '''
+        if name in self.functions:
+            if name in self.depreciated:
+                msg = 'Template helper function `%s` is depriciated' % name
+                self.log.warn(msg)
+            return self.functions[name]
+        else:
+            if name in self.depreciated:
+                msg = 'Template helper function `%s` is not available ' \
+                      'as it has been depriciated.\nYou can enable it ' \
+                      'by setting ckan.restrict_template_vars = true ' \
+                      'in your .ini file.' % name
+                self.log.critical(msg)
+            else:
+                msg = 'Helper function `%s` could not be found\n ' \
+                      '(are you missing an extension?)' % name
+                self.log.critical(msg)
+            return self.null_function
 
 
 def load_environment(global_conf, app_conf):
     """Configure the Pylons environment via the ``pylons.config``
     object
     """
-    
+
     ######  Pylons monkey-patch
-    # this must be run at a time when the env is semi-setup, thus inlined here. 
+    # this must be run at a time when the env is semi-setup, thus inlined here.
     # Required by the deliverance plugin and iATI
     from pylons.wsgiapp import PylonsApp
     import pkg_resources
@@ -45,7 +103,7 @@ def load_environment(global_conf, app_conf):
             return mycontroller
         return find_controller_generic(self, controller)
     PylonsApp.find_controller = find_controller
-    ###### END evil monkey-patch 
+    ###### END evil monkey-patch
 
     os.environ['CKAN_CONFIG'] = global_conf['__file__']
 
@@ -57,21 +115,22 @@ def load_environment(global_conf, app_conf):
                  templates=[os.path.join(root, 'templates')])
 
     # Initialize config with the basic options
-    
-    config.init_app(global_conf, app_conf, package='ckan', paths=paths)
-    
-    # load all CKAN plugins
-    plugins.load_all(config)
 
-    from ckan.plugins import PluginImplementations
-    from ckan.plugins.interfaces import IConfigurer
-    
-    for plugin in PluginImplementations(IConfigurer):
+    config.init_app(global_conf, app_conf, package='ckan', paths=paths)
+
+    # load all CKAN plugins
+    p.load_all(config)
+
+    for plugin in p.PluginImplementations(p.IConfigurer):
         # must do update in place as this does not work:
         # config = plugin.update_config(config)
         plugin.update_config(config)
-    
+
     # This is set up before globals are initialized
+    site_id = os.environ.get('CKAN_SITE_ID')
+    if site_id:
+        config['ckan.site_id'] = site_id
+
     site_url = config.get('ckan.site_url', '')
     ckan_host = config['ckan.host'] = urlparse(site_url).netloc
     if config.get('ckan.site_id') is None:
@@ -81,14 +140,21 @@ def load_environment(global_conf, app_conf):
                           'ckan.site_id for SOLR search-index rebuild to work.'
         config['ckan.site_id'] = ckan_host
 
-    # Check if SOLR schema is compatible
-    from ckan.lib.search import check_solr_schema_version
-    check_solr_schema_version()
+    # Init SOLR settings and check if the schema is compatible
+    #from ckan.lib.search import SolrSettings, check_solr_schema_version
+    search.SolrSettings.init(config.get('solr_url'),
+                             config.get('solr_user'),
+                             config.get('solr_password'))
+    search.check_solr_schema_version()
 
-    config['routes.map'] = make_map()
+    config['routes.map'] = routing.make_map()
     config['pylons.app_globals'] = app_globals.Globals()
-    config['pylons.h'] = ckan.lib.helpers
-        
+
+    # add helper functions
+    restrict_helpers = asbool(config.get('ckan.restrict_template_vars', 'false'))
+    helpers = _Helpers(h, restrict_helpers)
+    config['pylons.h'] = helpers
+
     ## redo template setup to use genshi.search_path (so remove std template setup)
     template_paths = [paths['templates'][0]]
     extra_template_paths = config.get('extra_template_paths', '')
@@ -107,24 +173,27 @@ def load_environment(global_conf, app_conf):
     logging.getLogger("MARKDOWN").setLevel(logging.getLogger().level)
 
     # Create the Genshi TemplateLoader
-    # config['pylons.app_globals'].genshi_loader = TemplateLoader(
-    #    paths['templates'], auto_reload=True)
-    # tmpl_options["genshi.loader_callback"] = template_loaded
     config['pylons.app_globals'].genshi_loader = TemplateLoader(
         template_paths, auto_reload=True, callback=template_loaded)
 
     # CONFIGURATION OPTIONS HERE (note: all config options will override
-    # any Pylons config options)    
+    # any Pylons config options)
 
     # Setup the SQLAlchemy database engine
-    engine = engine_from_config(config, 'sqlalchemy.')
+    # Suppress a couple of sqlalchemy warnings
+    warnings.filterwarnings('ignore', '^Unicode type received non-unicode bind param value', sqlalchemy.exc.SAWarning)
+    warnings.filterwarnings('ignore', "^Did not recognize type 'BIGINT' of column 'size'", sqlalchemy.exc.SAWarning)
+    warnings.filterwarnings('ignore', "^Did not recognize type 'tsvector' of column 'search_vector'", sqlalchemy.exc.SAWarning)
+
+    ckan_db = os.environ.get('CKAN_DB') 
+
+    if ckan_db:
+        config['sqlalchemy.url'] = ckan_db
+    engine = sqlalchemy.engine_from_config(config, 'sqlalchemy.')
 
     if not model.meta.engine:
         model.init_model(engine)
-    
-    from ckan.plugins import PluginImplementations
-    from ckan.plugins.interfaces import IConfigurable
-    
-    for plugin in PluginImplementations(IConfigurable):
+
+    for plugin in p.PluginImplementations(p.IConfigurable):
         plugin.configure(config)
-    
+

@@ -278,6 +278,9 @@ class TestController(CommonFixtureMethods, CkanServerCase, WsgiAppCase, BaseCase
     def assert_not_equal(self, *args, **kwds):
         assert_not_equal(*args, **kwds)
 
+    def clear_language_setting(self):
+        self.app.cookies = {}
+
 
 class TestSearchIndexer:
     '''
@@ -338,3 +341,11 @@ def regex_related(test):
 
 def clear_flash(res=None):
     messages = _flash.pop_messages()
+
+try:
+    from nose.tools import assert_in, assert_not_in
+except ImportError:
+    def assert_in(a, b):
+        assert a in b, '%r was not in %r' % (a, b)
+    def assert_not_in(a, b):
+        assert a not in b, '%r was in %r' % (a, b)        

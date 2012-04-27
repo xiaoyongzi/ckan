@@ -1,39 +1,5 @@
-
-CKAN.Templates.resourceAddLinkFile = ' \
-  <form> \
-    <dl> \
-      <dt> \
-        <label class="field_opt" for="url"> \
-          '+CKAN.Strings.fileUrl+' \
-        </label> \
-      </dt> \
-      <dd> \
-        <input name="url" type="text" placeholder="http://mydataset.com/file.csv" style="width: 60%"/> \
-        <input name="save" type="submit" class="pretty-button primary" value="'+CKAN.Strings.add+'" /> \
-        <input name="reset" type="reset" class="pretty-button" value="'+CKAN.Strings.cancel+'" /> \
-      </dd> \
-    </dl> \
-     \
-  </form> \
-';
-
-CKAN.Templates.resourceAddLinkApi = ' \
-  <form> \
-    <dl> \
-      <dt> \
-        <label class="field_opt" for="url"> \
-          '+CKAN.Strings.apiUrl+' \
-        </label> \
-      </dt> \
-      <dd> \
-        <input name="url" type="text" placeholder="http://mydataset.com/api/" style="width: 60%" /> \
-        <input name="save" type="submit" class="pretty-button primary" value="'+CKAN.Strings.add+'" /> \
-        <input name="reset" type="reset" class="pretty-button" value="'+CKAN.Strings.cancel+'" /> \
-      </dd> \
-    </dl> \
-     \
-  </form> \
-';
+var CKAN = CKAN || {};
+CKAN.Templates = CKAN.Templates || {};
 
 CKAN.Templates.resourceUpload = ' \
 <div class="fileupload"> \
@@ -42,122 +8,162 @@ CKAN.Templates.resourceUpload = ' \
     method="POST"> \
  \
     <div class="hidden-inputs"></div> \
-    <dl> \
-      <dt> \
-        <label class="field_opt fileinput-button" for="file"> \
-          '+CKAN.Strings.file+' \
-        </label> \
-      </dt> \
-      <dd> \
-        <input type="file" name="file" /> \
-        <br /> \
-        <div class="fileinfo"></div> \
-        <input id="upload" name="upload" type="submit" class="pretty-button primary" value="'+CKAN.Strings.add+'" /> \
-        <input id="reset" name="reset" type="reset" class="pretty-button" value="'+CKAN.Strings.cancel+'" /> \
-      </dd> \
-    </dl> \
+    <input type="file" name="file" /> \
+    <br /> \
+    <div class="fileinfo"></div> \
+    <input id="upload" name="add-resource-upload" type="submit" class="btn btn-primary" value="'+CKAN.Strings.upload+'" /> \
   </form> \
-  <div class="alert-message block-message" style="display: none;"></div> \
-  </div> \
-</div> \
-';
+  <div class="alert alert-block" style="display: none;"></div> \
+</div>';
 
 
 
 CKAN.Templates.resourceEntry = ' \
-  <td class="resource-edit"> \
-    <a class="resource-edit-expand js-resource-edit-toggle" href="#">${resource.name}</a>\
-    <div class="resource-edit-expanded js-resource-edit-expanded"> \
-    <table> \
-      <tbody> \
-      <tr> \
-      <td class="resource-edit-label">'+CKAN.Strings.name+'</td> \
-      <td class="resource-edit-value" colspan="3"> \
+  <li class="ui-state-default resource-edit drag-bars"> \
+    <a class="resource-open-my-panel" href="#">\
+      <img class="js-resource-icon inline-icon resource-icon" src="${resource_icon}" /> \
+      <span class="js-resource-edit-name">${resource.name}</span>\
+    </a>\
+  </li>';
+
+var youCanUseMarkdownString = CKAN.Strings.youCanUseMarkdown.replace('%a', '<a href="http://daringfireball.net/projects/markdown/syntax" target="_blank">').replace('%b', '</a>');
+var shouldADataStoreBeEnabledString = CKAN.Strings.shouldADataStoreBeEnabled.replace('%a', '<a href="http://docs.ckan.org/en/latest/datastore.html" target="_blank">').replace('%b', '</a>');
+var datesAreInISOString = CKAN.Strings.datesAreInISO.replace('%a', '<a href="http://en.wikipedia.org/wiki/ISO_8601#Calendar_dates" target="_blank">').replace('%b', '</a>').replace('%c', '<strong>').replace('%d', '</strong>');
+
+// TODO it would be nice to unify this with the markdown editor specified in helpers.py
+CKAN.Templates.resourceDetails = ' \
+  <div style="display: none;" class="resource-details"> \
+    <div class="flash-messages"> \
+      <div class="alert alert-error resource-errors"></div> \
+    </div> \
+    <div class="control-group"> \
+      <label for="" class="control-label" property="rdfs:label">'+CKAN.Strings.name+'</label> \
+      <div class="controls" property="rdf:value"> \
         <input class="js-resource-edit-name" name="resources__${num}__name" type="text" value="${resource.name}" class="long" /> \
-      </td> \
-      </tr> \
-      <tr> \
-      <td class="resource-edit-label">'+CKAN.Strings.description+'</td> \
-      <td class="resource-edit-value" colspan="3"> \
-        <input name="resources__${num}__description" type="text" value="${resource.description}" class="long" /> \
-      </td> \
-      </tr> \
-      <tr> \
-      <td class="resource-edit-label">'+CKAN.Strings.url+'</td> \
-      <td class="resource-edit-value" colspan="3"> \
-      {{if resource.resource_type=="file.upload"}} \
-        ${resource.url} \
-        <input name="resources__${num}__url" type="hidden" value="${resource.url}" /> \
-      {{/if}} \
-      {{if resource.resource_type!="file.upload"}} \
-        <input name="resources__${num}__url" type="text" value="${resource.url}" class="long" /> \
-      {{/if}} \
-      </td> \
-      </tr> \
-      <tr> \
-      <td class="resource-edit-label">'+CKAN.Strings.format+'</td> \
-      <td class="resource-edit-value"> \
-        <input name="resources__${num}__format" type="text" value="${resource.format}" class="long autocomplete-format" /> \
-      </td> \
-      <td class="resource-edit-label">'+CKAN.Strings.resourceType+'</td> \
-      <td class="resource-edit-value"> \
+      </div> \
+    </div> \
+    <div class="control-group"> \
+      <label for="" class="control-label" property="rdfs:label">'+CKAN.Strings.description+'</label> \
+      <div class="controls"> \
+        <div class="markdown-editor"> \
+          <ul class="button-row"> \
+            <li><button class="btn js-markdown-edit depressed">'+CKAN.Strings.edit+'</button></li> \
+            <li><button class="btn js-markdown-preview">'+CKAN.Strings.preview+'</button></li> \
+          </ul> \
+          <div> \
+            <textarea class="js-resource-edit-description markdown-input" name="resources__${num}__description">${resource.description}</textarea> \
+          </div> \
+          <div class="markdown-preview" style="display: none;"></div> \
+          <span class="hints">'+youCanUseMarkdownString+'</span> \
+        </div> \
+      </div> \
+    </div> \
+    <div class="control-group {{if resource.url_error}} error{{/if}}"> \
+      <label for="" class="control-label" property="rdfs:label">'+CKAN.Strings.url+'</label> \
+      <div class="controls"> \
         {{if resource.resource_type=="file.upload"}} \
-          ${resource.resource_type} \
+          ${resource.url} \
+          <input name="resources__${num}__url" type="hidden" value="${resource.url}" /> \
+        {{/if}} \
+        {{if resource.resource_type!="file.upload"}} \
+          <input name="resources__${num}__url" type="text" value="${resource.url}" class="long" title="${resource.url_error}" /> \
+        {{/if}} \
+      </div> \
+    </div> \
+    <div class="control-group"> \
+      <label for="" class="control-label" property="rdfs:label">'+CKAN.Strings.format + '\
+          &nbsp;&nbsp;<img class="js-resource-icon inline-icon resource-icon" src="${resource_icon}" /> </label>\
+      <div class="controls"> \
+        <input name="resources__${num}__format" type="text" value="${resource.format}" class="long js-resource-edit-format autocomplete-format" placeholder="'+CKAN.Strings.resourceFormatPlaceholder+'" /> \
+      </div> \
+    </div> \
+    <div class="control-group"> \
+      <label for="" class="control-label" property="rdfs:label">'+CKAN.Strings.resourceType+'</label> \
+      <div class="controls"> \
+        {{if resource.resource_type=="file.upload"}} \
+          '+CKAN.Strings.dataFileUploaded+' \
           <input name="resources__${num}__resource_type" type="hidden" value="${resource.resource_type}" /> \
         {{/if}} \
         {{if resource.resource_type!="file.upload"}} \
-          <input name="resources__${num}__resource_type" type="text" value="${resource.resource_type}" /> \
+          <select name="resources__${num}__resource_type" class="short"> \
+            {{each resourceTypeOptions}} \
+            <option value="${$value[0]}" {{if $value[0]==resource.resource_type}}selected="selected"{{/if}}>${$value[1]}</option> \
+            {{/each}} \
+          </select> \
         {{/if}} \
-      </td> \
-      </tr> \
-      <tr> \
-      <td class="resource-edit-label">'+CKAN.Strings.sizeBracketsBytes+'</td> \
-      <td class="resource-edit-value"> \
-        <input name="resources__${num}__size" type="text" value="${resource.size}" class="long" /> \
-      </td> \
-      <td class="resource-edit-label">'+CKAN.Strings.mimetype+'</td> \
-      <td class="resource-edit-value"> \
-        <input name="resources__${num}__mimetype" type="text" value="${resource.mimetype}" /> \
-      </td> \
-      </tr> \
-      <tr> \
-      <td class="resource-edit-label">'+CKAN.Strings.lastModified+'</td> \
-      <td class="resource-edit-value"> \
-        <input name="resources__${num}__last_modified" type="text" value="${resource.last_modified}" /> \
-      </td> \
-      <td class="resource-edit-label">'+CKAN.Strings.mimetypeInner+'</td> \
-      <td class="resource-edit-value"> \
-        <input name="resources__${num}__mimetype_inner" type="text" value="${resource.mimetype_inner}" /> \
-      </td> \
-      </tr> \
-      <tr> \
-      <td class="resource-edit-label">'+CKAN.Strings.hash+'</td> \
-      <td class="resource-edit-value" colspan="3"> \
-        ${resource.hash || "Unknown"} \
-        <input name="resources__${num}__hash" type="hidden" value="${resource.hash}" /> \
-      </td> \
-      </tr> \
-      <tr> \
-      <td class="resource-edit-label">'+CKAN.Strings.id+'</td> \
-      <td class="resource-edit-value" colspan="3"> \
-        ${resource.id} \
-        <input name="resources__${num}__id" type="hidden" value="${resource.id}" /> \
-      </td> \
-      </tr> \
-    </tbody> \
-    </table> \
+      </div> \
     </div> \
-  </td> \
-  <td class="resource-edit-delete"> \
-    <a class="resource-edit-delete js-resource-edit-delete" href="#"><img src="/images/icons/delete.png" /></a> \
-  </td> \
+    <div class="control-group datastore-enabled"> \
+      <label for="" class="control-label" property="rdfs:label">'+CKAN.Strings.datastoreEnabled+'</label> \
+      <div class="controls"> \
+        <label class="checkbox"> \
+          <input type="checkbox" class="js-datastore-enabled-checkbox" /> \
+          <input type="hidden" name="resources__${num}__webstore_url" value="${resource.webstore_url}" class="js-datastore-enabled-text" /> \
+          <span class="hint">'+shouldADataStoreBeEnabledString+'</span> \
+        </label> \
+      </div> \
+    </div> \
+    <div class="control-group"> \
+      <label for="" class="control-label" property="rdfs:label">'+CKAN.Strings.lastModified+'</label> \
+      <div class="controls"> \
+        <input class="input-small" name="resources__${num}__last_modified" type="text" value="${resource.last_modified}" /> \
+        <div class="hint">'+datesAreInISOString+'</div> \
+      </div> \
+    </div> \
+    <div class="control-group"> \
+      <label for="" class="control-label" property="rdfs:label">'+CKAN.Strings.sizeBracketsBytes+'</label> \
+      <div class="controls"> \
+        <input name="resources__${num}__size" type="text" value="${resource.size}" class="long" /> \
+      </div> \
+    </div> \
+    <div class="control-group"> \
+      <label for="" class="control-label" property="rdfs:label">'+CKAN.Strings.mimetype+'</label> \
+      <div class="controls"> \
+        <input name="resources__${num}__mimetype" type="text" value="${resource.mimetype}" /> \
+      </div> \
+    </div> \
+    <div class="control-group"> \
+      <label for="" class="control-label" property="rdfs:label">'+CKAN.Strings.mimetypeInner+'</label> \
+      <div class="controls"> \
+        <input name="resources__${num}__mimetype_inner" type="text" value="${resource.mimetype_inner}" /> \
+      </div> \
+    </div> \
+    <div class="control-group"> \
+      <label for="" class="control-label" property="rdfs:label">'+CKAN.Strings.id+'</label> \
+      <div class="controls"> \
+        <input type="text" disabled="disabled" value="${resource.id}" class="disabled" /> \
+        <input name="resources__${num}__id" type="hidden" value="${resource.id}" /> \
+      </div> \
+    </div> \
+    <div class="control-group"> \
+      <label for="" class="control-label" property="rdfs:label">'+CKAN.Strings.hash+'</label> \
+      <div class="controls"> \
+        <input type="text" disabled="disabled" class="disabled" value="${resource.hash || "'+CKAN.Strings.unknown+'"}"/> \
+        <input name="resources__${num}__hash" type="hidden" value="${resource.hash}" /> \
+      </div> \
+    </div> \
+    <div class="control-group"> \
+      <label for="" class="control-label" property="rdfs:label">'+CKAN.Strings.created+'</label> \
+      <div class="controls"> \
+        <input type="text" disabled="disabled" value="${resource.created}" class="disabled" /> \
+      </div> \
+    </div> \
+    <div class="control-group"> \
+      <label class="control-label">'+CKAN.Strings.extraFields+' \
+        <button class="btn btn-small add-resource-extra">'+CKAN.Strings.addExtraField+'</button>\
+      </label>\
+      <div class="controls"> \
+        <div class="dynamic-extras"> \
+        </div> \
+      </div> \
+    <button class="btn btn-danger resource-edit-delete js-resource-edit-delete">'+CKAN.Strings.deleteResource+'</button>\
+  </div> \
 ';
 
-CKAN.Templates.datasetNotesField = ' \
-  <div id="notes-extract"> \
+CKAN.Templates.resourceExtra = ' \
+  <div class="dynamic-extra"> \
+  <button class="btn btn-danger remove-resource-extra">X</button>\
+  <input type="text" placeholder="Key" class="extra-key" value="${key}" /> \
+  <input type="text" placeholder="Value" class="extra-value" value="${value}" /> \
   </div> \
-  <div id="notes-remainder"> \
-  </div> \
-  <div id="dataset-notes-toggle"><a class="more" href="#">Read more</a><a class="less" href="#" style="display: none;">Read less</a></div> \
-';
-
+  ';

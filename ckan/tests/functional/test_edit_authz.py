@@ -6,8 +6,9 @@ import ckan.authz as authz
 
 def check_and_set_checkbox(theform, user, role, should_be, set_to):
    '''Given an authz form, find the checkbox associated with the strings user and role,
-   assert that it's in the state 'should_be', and set it to 'set_to' '''
-   user_role_string = '%s$%s' % (user, role)
+   assert that it\'s in the state 'should_be', and set it to 'set_to' '''
+   user_id = (model.User.get(user) or model.AuthorizationGroup.get(user)).id
+   user_role_string = '%s$%s' % (user_id, role)
    checkboxes = [x for x in theform.fields[user_role_string] \
                                    if x.__class__.__name__ == 'Checkbox']
 
@@ -34,7 +35,7 @@ class TestEditAuthz(TestController):
         # one extra authzgroup, authzgroup2, with no permissions to start with
         model.repo.init_db()
         model.repo.new_revision()
-        
+
         self.sysadmin = 'sysadmin'
         sysadmin_user = model.User(name=unicode(self.sysadmin))
         self.admin = 'administrator'
@@ -132,7 +133,7 @@ class TestEditAuthz(TestController):
 
 
     def assert_roles_to_be(self, actual_roles_list, expected_roles_list):
-        # given an actual and an expected list of user/roles, assert that they're as expected, 
+        # given an actual and an expected list of user/roles, assert that they're as expected,
         # modulo ordering.
         ok = ( len(actual_roles_list) == len(expected_roles_list) )
         for r in actual_roles_list:
@@ -158,7 +159,7 @@ class TestEditAuthz(TestController):
                        ('visitor', 'reader'),
                        ('logged_in', 'admin')]
 
-        # loop variables here are the controller string, the name of the object we're changing, and three functions, 
+        # loop variables here are the controller string, the name of the object we're changing, and three functions,
         # the first fn gets the roles which we'd like to change, and the other two get the roles which we'd like to stay the same.
         for (c,i,var,const1,const2) in [('package', self.pkg, self.package_roles, self.group_roles, self.authzgroup_roles),\
                         ('group', self.group, self.group_roles, self.package_roles, self.authzgroup_roles),\
@@ -228,7 +229,7 @@ class TestEditAuthz(TestController):
                         ('logged_in', 'editor')]
 
 
-        # loop variables here are the controller string, the name of the object we're changing, and three functions, 
+        # loop variables here are the controller string, the name of the object we're changing, and three functions,
         # the first fn gets the roles which we'd like to change, and the other two get the roles which we'd like to stay the same.
         for (c,i,var,const1,const2) in [('package', self.pkg, self.package_roles, self.group_roles, self.authzgroup_roles),\
                         ('group', self.group, self.group_roles, self.package_roles, self.authzgroup_roles),\
@@ -283,7 +284,7 @@ class TestEditAuthz(TestController):
            # tick it and submit
            checkbox.checked=True
            res = form.submit('add', extra_environ={'REMOTE_USER':user})
-           assert "User Added" in res, "don't see flash message"
+           assert "User role(s) added" in res, "don't see flash message"
 
            # check that the page contains strings for everyone
            assert 'visitor' in res
@@ -320,7 +321,7 @@ class TestEditAuthz(TestController):
         self.delete_role_as(self.sysadmin)
 
 
-    # now a version of the above tests dealing with permissions assigned to authzgroups 
+    # now a version of the above tests dealing with permissions assigned to authzgroups
     # (as opposed to on authzgroups)
     def add_change_delete_authzgroup_as(self, user):
 
@@ -358,7 +359,7 @@ class TestEditAuthz(TestController):
            assert 'administrator' in res
            assert 'logged_in' in res
            assert 'authzgroup2' not in res
- 
+
            # add authzgroup2 as an admin
            form = res.forms['authzgroup_addform']
            form.fields['new_user_name'][0].value='authzgroup2'
@@ -369,7 +370,7 @@ class TestEditAuthz(TestController):
            # tick it and submit
            checkbox.checked=True
            res = form.submit('authz_add', extra_environ={'REMOTE_USER':user})
-           assert "Authorization Group Added" in res, "don't see flash message"
+           assert "User role(s) added" in res, "don't see flash message"
 
            # examine the new page for user names/authzgroup names
            assert 'visitor' in res
@@ -381,7 +382,7 @@ class TestEditAuthz(TestController):
            self.assert_roles_to_be(var(), changed_roles)
            self.assert_roles_to_be(const1(), normal_roles)
            self.assert_roles_to_be(const2(), normal_roles)
- 
+
            # check that the checkbox states are what we think they should be
            # and change authzgroup2 from admin to editor
            form = res.forms['authzgroup_form']

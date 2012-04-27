@@ -5,30 +5,26 @@
   
   <py:def function="page_title">${c.pkg.title or c.pkg.name} - Edit - Datasets</py:def>
   <py:def function="page_heading">Edit: ${c.pkg.title or c.pkg.name}</py:def>
-
-  <py:def function="body_class">hide-sidebar</py:def>
+  <py:def function="body_class">no-sidebar</py:def>
 
   <py:def function="optional_head">
     <script>
-      var preload_dataset = ${c.pkg_json};
+      var resources_json = ${h.literal(c.resources_json)};
+      var form_errors = ${c.errors_json};
     </script>
   </py:def>
 
-  <py:match path="primarysidebar">
-    <li class="widget-container widget_text">
-      <ul class="dataset-edit-nav">
-        <!-- One button for each fieldset -->
-        <li><a href="#section-basic-information">Basic Information</a></li>
-        <li><a href="#section-further-information">Futher Information</a></li>
-        <li><a href="#section-resources">Resources</a></li>
-        <li><a href="#section-groups">Groups &amp; Tags</a></li>
-        <li><a href="#section-extras">Extras</a></li>
-      </ul>
-    </li>
-  </py:match>
-
   <div py:match="content" class="dataset-edit-form">
-    ${c.form}
+    <div class="tabbable tabs-left dataset-edit-tabs">
+      <ul class="nav nav-tabs">
+        <!-- One button for each fieldset -->
+        <li class="active"><a data-toggle="tab" href="#basic-information">Basic Information</a></li>
+        <li><a data-toggle="tab" href="#further-information">Further Information</a></li>
+        <li><a data-toggle="tab" href="#extras">Extras</a></li>
+        <li py:if="(c.is_sysadmin or c.auth_for_change_state)"><a data-toggle="tab" href="#delete">Delete</a></li>
+      </ul>
+      ${c.form}
+    </div><!-- /tabbable -->
   </div>
 
   <xi:include href="layout.html" />

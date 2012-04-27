@@ -67,7 +67,7 @@ class TestSearch(FunctionalTestCase):
 
         # multiple words
         res = self.app.get('/dataset?q=Government%20Expenditure')
-        result = self._check_results(res, 1, 'uk-government-expenditure')
+        result = self._check_results(res, 5, 'uk-government-expenditure')
 
 class TestSearch2(FunctionalTestCase, PylonsTestCase):#, TestPackageForm):
 
@@ -108,7 +108,7 @@ class TestSearch2(FunctionalTestCase, PylonsTestCase):#, TestPackageForm):
         res = self.app.get(offset)
         assert 'Search - ' in res
         self._check_search_results(res, u'th\xfcmb', ['<strong>1</strong>'])
-        self._check_search_results(res, 'thumb', ['<strong>0</strong>'])
+        self._check_search_results(res, 'thumb', ['<strong>1</strong>'])
 
     @search_related
     def test_search_escape_chars(self):

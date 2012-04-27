@@ -6,6 +6,7 @@ from datetime import datetime
 from hashlib import md5
 import logging
 import os
+import urllib
 
 from paste.deploy.converters import asbool
 from pylons import c, cache, config, g, request, response, session
@@ -16,10 +17,12 @@ from pylons.decorators import jsonify, validate
 from pylons.i18n import _, ungettext, N_, gettext
 from pylons.templating import cached_template, pylons_globals
 from genshi.template import MarkupTemplate
+from genshi.template.text import NewTextTemplate
 from webhelpers.html import literal
 
+import ckan.exceptions
 import ckan
-from ckan import authz
+import ckan.authz as authz
 from ckan.lib import i18n
 import ckan.lib.helpers as h
 from ckan.plugins import PluginImplementations, IGenshiStreamFilter
@@ -39,38 +42,110 @@ def abort(status_code=None, detail='', headers=None, comment=None):
     # #1267 Convert detail to plain text, since WebOb 0.9.7.1 (which comes
     # with Lucid) causes an exception when unicode is received.
     detail = detail.encode('utf8')
-    return _abort(status_code=status_code, 
+    return _abort(status_code=status_code,
                   detail=detail,
-                  headers=headers, 
+                  headers=headers,
                   comment=comment)
 
-def render(template_name, extra_vars=None, cache_key=None, cache_type=None, 
-           cache_expire=None, method='xhtml', loader_class=MarkupTemplate):
-    
+
+def render_snippet(template_name, **kw):
+    ''' Helper function for rendering snippets. Rendered html has
+    comment tags added to show the template used. NOTE: unlike other
+    render functions this takes a list of keywords instead of a dict for
+    the extra template variables. '''
+    # allow cache_force to be set in render function
+    cache_force = kw.pop('cache_force', None)
+    output = render(template_name, extra_vars=kw, cache_force=cache_force)
+    output = '\n<!-- Snippet %s start -->\n%s\n<!-- Snippet %s end -->\n' % (
+                    template_name, output, template_name)
+    return literal(output)
+
+def render_text(template_name, extra_vars=None, cache_force=None):
+    ''' Helper function to render a genshi NewTextTemplate without
+    having to pass the loader_class or method. '''
+    return render(template_name,
+                  extra_vars=extra_vars,
+                  cache_force=cache_force,
+                  method='text',
+                  loader_class=NewTextTemplate)
+
+def render(template_name, extra_vars=None, cache_key=None, cache_type=None,
+           cache_expire=None, method='xhtml', loader_class=MarkupTemplate,
+           cache_force = None):
+    ''' Main genshi template rendering function. '''
+
     def render_template():
         globs = extra_vars or {}
         globs.update(pylons_globals())
         globs['actions'] = model.Action
+        # add the template name to the context to help us know where we are
+        # used in depreciating functions etc
+        c.__template_name = template_name
+
+        # Using pylons.url() directly destroys the localisation stuff so
+        # we remove it so any bad templates crash and burn
+        del globs['url']
+
         template = globs['app_globals'].genshi_loader.load(template_name,
             cls=loader_class)
         stream = template.generate(**globs)
-        
+
         for item in PluginImplementations(IGenshiStreamFilter):
             stream = item.filter(stream)
-        
-        return literal(stream.render(method=method, encoding=None, strip_whitespace=False))
-    
+
+        if loader_class == NewTextTemplate:
+            return literal(stream.render(method="text", encoding=None))
+
+        return literal(stream.render(method=method, encoding=None, strip_whitespace=True))
+
+
     if 'Pragma' in response.headers:
         del response.headers["Pragma"]
-    if cache_key is not None or cache_type is not None:
-        response.headers["Cache-Control"] = "public"  
-    
-    if cache_expire is not None:
-        response.headers["Cache-Control"] = "max-age=%s, must-revalidate" % cache_expire
-    
-    return cached_template(template_name, render_template, cache_key=cache_key, 
-                           cache_type=cache_type, cache_expire=cache_expire)
-                           #, ns_options=('method'), method=method)
+
+    ## Caching Logic
+    allow_cache = True
+    # Force cache or not if explicit.
+    if cache_force is not None:
+        allow_cache = cache_force
+    # Do not allow caching of pages for logged in users/flash messages etc.
+    elif session.last_accessed:
+        allow_cache = False
+    # Tests etc.
+    elif 'REMOTE_USER' in request.environ:
+        allow_cache = False
+    # Don't cache if based on a non-cachable template used in this.
+    elif request.environ.get('__no_cache__'):
+        allow_cache = False
+    # Don't cache if we have set the __no_cache__ param in the query string.
+    elif request.params.get('__no_cache__'):
+        allow_cache = False
+    # Don't cache if we have extra vars containing data.
+    elif extra_vars:
+        for k, v in extra_vars.iteritems():
+            allow_cache = False
+            break
+    # Record cachability for the page cache if enabled
+    request.environ['CKAN_PAGE_CACHABLE'] = allow_cache
+
+    if allow_cache:
+        response.headers["Cache-Control"] = "public"
+        try:
+            cache_expire = int(config.get('ckan.cache_expires', 0))
+            response.headers["Cache-Control"] += ", max-age=%s, must-revalidate" % cache_expire
+        except ValueError:
+            pass
+    else:
+        # We do not want caching.
+        response.headers["Cache-Control"] = "private"
+        # Prevent any further rendering from being cached.
+        request.environ['__no_cache__'] = True
+
+    # Render Time :)
+    try:
+        return cached_template(template_name, render_template, loader_class=loader_class)
+    except ckan.exceptions.CkanUrlException, e:
+        raise ckan.exceptions.CkanUrlException('\nAn Exception has been raised for template %s\n%s'
+                        % (template_name, e.message))
 
 
 class ValidationException(Exception):
@@ -87,23 +162,38 @@ class BaseController(WSGIController):
         i18n.handle_request(request, c)
 
     def _identify_user(self):
+        '''
+        Identifies the user using two methods:
+        a) If he has logged into the web interface then repoze.who will
+           set REMOTE_USER.
+        b) For API calls he may set a header with his API key.
+        If the user is identified then:
+          c.user = user name (unicode)
+          c.author = user name
+        otherwise:
+          c.user = None
+          c.author = user\'s IP address (unicode)
+        '''
         # see if it was proxied first
         c.remote_addr = request.environ.get('HTTP_X_FORWARDED_FOR', '')
         if not c.remote_addr:
             c.remote_addr = request.environ.get('REMOTE_ADDR', 'Unknown IP Address')
 
-        # what is different between session['user'] and environ['REMOTE_USER']
+        # environ['REMOTE_USER'] is set by repoze.who if it authenticates a user's
+        # cookie or OpenID. (But it doesn't check the user (still) exists in our
+        # database - we need to do that here.
         c.user = request.environ.get('REMOTE_USER', '')
         if c.user:
             c.user = c.user.decode('utf8')
             c.userobj = model.User.by_name(c.user)
             if c.userobj is None:
-                # This occurs when you are logged in with openid, clean db
+                # This occurs when you are logged in, clean db
                 # and then restart i.e. only really for testers. There is no
                 # user object, so even though repoze thinks you are logged in
                 # and your cookie has ckan_display_name, we need to force user
-                # to login again to get the User object.
+                # to logout and login again to get the User object.
                 c.user = None
+                self.log.warn('Logout to login')
         else:
             c.userobj = self._get_user_for_apikey()
             if c.userobj is not None:
@@ -118,7 +208,36 @@ class BaseController(WSGIController):
         """Invoke the Controller"""
         # WSGIController.__call__ dispatches to the Controller method
         # the request is routed to. This routing information is
-        # available in environ['pylons.routes_dict']    
+        # available in environ['pylons.routes_dict']
+
+        # Clean out any old cookies as they may contain api keys etc
+        # This also improves the cachability of our pages as cookies
+        # prevent proxy servers from caching content unless they have
+        # been configured to ignore them.
+        # we do not want to clear cookies when setting the user lang
+        if not environ.get('PATH_INFO').startswith('/user/set_lang'):
+            for cookie in request.cookies:
+                if cookie.startswith('ckan') and cookie not in ['ckan']:
+                    response.delete_cookie(cookie)
+                # Remove the ckan session cookie if not used e.g. logged out
+                elif cookie == 'ckan' and not c.user:
+                    # Check session for valid data (including flash messages)
+                    # (DGU also uses session for a shopping basket-type behaviour)
+                    is_valid_cookie_data = False
+                    for key, value in session.items():
+                        if not key.startswith('_') and value:
+                            is_valid_cookie_data = True
+                            break
+                    if not is_valid_cookie_data:
+                        if session.id:
+                            if not session.get('lang'):
+                                session.delete()
+                        else:
+                            response.delete_cookie(cookie)
+                # Remove auth_tkt repoze.who cookie if user not logged in.
+                elif cookie == 'auth_tkt' and not session.id:
+                    response.delete_cookie(cookie)
+
         try:
             return WSGIController.__call__(self, environ, start_response)
         finally:
@@ -129,8 +248,8 @@ class BaseController(WSGIController):
 
     def _set_cors(self):
         response.headers['Access-Control-Allow-Origin'] = "*"
-        response.headers['Access-Control-Allow-Methods'] = "POST, PUT, GET, DELETE"
-        response.headers['Access-Control-Allow-Headers'] = "X-CKAN-API-KEY, Content-Type"
+        response.headers['Access-Control-Allow-Methods'] = "POST, PUT, GET, DELETE, OPTIONS"
+        response.headers['Access-Control-Allow-Headers'] = "X-CKAN-API-KEY, Authorization, Content-Type"
 
     def _get_user(self, reference):
         return model.User.by_name(reference)
@@ -161,12 +280,17 @@ class BaseController(WSGIController):
         request_data = None
         if request.POST:
             try:
-                request_data = request.POST.keys()
+                keys = request.POST.keys()
+                # Parsing breaks if there is a = in the value, so for now
+                # we will check if the data is actually all in a single key
+                if keys and request.POST[ keys[0] ] in [u'1',u'']:
+                    request_data = keys[0]
+                else:
+                    request_data = urllib.unquote_plus(request.body)
             except Exception, inst:
                 msg = "Could not find the POST data: %r : %s" % \
                       (request.POST, inst)
                 raise ValueError, msg
-            request_data = request_data[0]
         else:
             try:
                 request_data = request.body
@@ -242,13 +366,13 @@ class BaseController(WSGIController):
         return path
 
     @classmethod
-    def _get_user_editable_groups(cls): 
+    def _get_user_editable_groups(cls):
         if not hasattr(c, 'user'):
             c.user = model.PSEUDO_USER__VISITOR
         import ckan.authz # Todo: Move import to top of this file?
-        groups = ckan.authz.Authorizer.authorized_query(c.user, model.Group, 
+        groups = ckan.authz.Authorizer.authorized_query(c.user, model.Group,
             action=model.Action.EDIT).all()
-        return [g for g in groups if g.state==model.State.ACTIVE] 
+        return [g for g in groups if g.state==model.State.ACTIVE]
 
     def _get_package_dict(self, *args, **kwds):
         import ckan.forms
@@ -279,20 +403,93 @@ class BaseController(WSGIController):
         )
         return fieldset
 
-    def _handle_update_of_authz(self, current_uors, domain_object):
-        # In the event of a post request, work out which of the four possible actions
-        # is to be done, and do it before displaying the page
-        if 'add' in request.POST:
-            self._add_user_object_role('users', current_uors, domain_object)
+    def _handle_update_of_authz(self, domain_object):
+        '''In the event of a post request to a domain object\'s authz form,
+        work out which of the four possible actions is to be done,
+        and do it before displaying the page.
 
-        if 'authz_add' in request.POST:
-            self._add_user_object_role('authz_groups', current_uors, domain_object)
+        Returns the updated roles for the domain_object.
+        '''
+        from ckan.logic import NotFound, get_action
 
+        context = {'model': model, 'session': model.Session,
+                   'user': c.user or c.author}
+        data_dict = {'domain_object': domain_object.id}
+
+        # Work out actions needed, depending on which button was pressed
         if 'save' in request.POST:
-            self._update_user_object_roles('users', current_uors, domain_object)
+            user_or_authgroup = 'user'
+            update_or_add = 'update'
+        elif 'add' in request.POST:
+            user_or_authgroup = 'user'
+            update_or_add = 'add'
+        elif 'authz_save' in request.POST:
+            user_or_authgroup = 'authorization_group'
+            update_or_add = 'update'
+        elif 'authz_add' in request.POST:
+            user_or_authgroup = 'authorization_group'
+            update_or_add = 'add'
+        else:
+            user_or_authgroup = None
+            update_or_add = None
 
-        if 'authz_save' in request.POST:
-            self._update_user_object_roles('authz_groups', current_uors, domain_object)
+        # Work out what role checkboxes are checked or unchecked
+        checked_roles = [ box_id for (box_id, value) in request.params.items() \
+                          if (value == u'on')]
+        unchecked_roles = [ box_id for (box_id, value) in request.params.items() \
+                          if (value == u'submitted')]
+
+        action = None
+        if update_or_add is 'update':
+            # Get user_roles by decoding the checkbox grid - user$role strings
+            user_roles = {}
+            for checked_role in checked_roles:
+                user_or_authgroup_id, role = checked_role.split('$')
+                if user_or_authgroup_id not in user_roles:
+                    user_roles[user_or_authgroup_id] = []
+                user_roles[user_or_authgroup_id].append(role)
+            # Users without roles need adding to the user_roles too to make
+            # their roles be deleted
+            for unchecked_role in unchecked_roles:
+                user_or_authgroup_id, role = unchecked_role.split('$')
+                if user_or_authgroup_id not in user_roles:
+                    user_roles[user_or_authgroup_id] = []
+            # Convert user_roles to role dictionaries
+            role_dicts = []
+            for user, roles in user_roles.items():
+                role_dicts.append({user_or_authgroup: user, 'roles': roles})
+            data_dict['user_roles'] = role_dicts
+
+            action = 'user_role_bulk_update'
+            success_message = _('Updated')
+        elif update_or_add is 'add':
+            # Roles for this new user is a simple list from the checkbox row
+            data_dict['roles'] = checked_roles
+
+            # User (or "user group" aka AuthorizationGroup) comes from
+            # the input box.
+            new_user = request.params.get('new_user_name')
+            if new_user:
+                data_dict[user_or_authgroup] = new_user
+
+                action = 'user_role_update'
+                success_message = _('User role(s) added')
+            else:
+                h.flash_error(_('Please supply a user name'))
+
+        if action:
+            try:
+                roles = get_action(action)(context, data_dict)
+            except NotFound, e:
+                h.flash_error(_('Not found') + (': %s' % e if str(e) else ''))
+            else:
+                h.flash_success(success_message)
+
+        # Return roles for all users on this domain object
+        if update_or_add is 'add':
+            if user_or_authgroup in data_dict:
+                del data_dict[user_or_authgroup]
+        return get_action('roles_show')(context, data_dict)
 
     def _prepare_authz_info_for_render(self, user_object_roles):
         # =================
@@ -302,13 +499,16 @@ class BaseController(WSGIController):
         # associated with any object, so that's easy:
         possible_roles = model.Role.get_all()
 
-
         # uniquify and sort
-        users = sorted(list(set([uor.user.name for uor in user_object_roles if uor.user])))
-        authz_groups = sorted(list(set([uor.authorized_group.name for uor in user_object_roles if uor.authorized_group])))
+        users = sorted(list(set([uor['user_id'] for uor in user_object_roles['roles'] if uor['user_id']])))
+        authz_groups = sorted(list(set([uor['authorized_group_id'] \
+                                        for uor in user_object_roles['roles'] \
+                                        if uor['authorized_group_id']])))
 
         # make a dictionary from (user, role) to True, False
-        users_roles = [( uor.user.name, uor.role) for uor in user_object_roles if uor.user]
+        users_roles = [( uor['user_id'], uor['role']) \
+                       for uor in user_object_roles['roles'] \
+                       if uor['user_id']]
         user_role_dict={}
         for u in users:
             for r in possible_roles:
@@ -318,7 +518,9 @@ class BaseController(WSGIController):
                     user_role_dict[(u,r)]=False
 
         # and similarly make a dictionary from (authz_group, role) to True, False
-        authz_groups_roles = [( uor.authorized_group.name, uor.role) for uor in user_object_roles if uor.authorized_group]
+        authz_groups_roles = [( uor['authorized_group_id'], uor['role']) \
+                              for uor in user_object_roles['roles']
+                              if uor['authorized_group_id']]
         authz_groups_role_dict={}
         for u in authz_groups:
             for r in possible_roles:
@@ -332,141 +534,6 @@ class BaseController(WSGIController):
         c.user_role_dict = user_role_dict
         c.authz_groups = authz_groups
         c.authz_groups_role_dict = authz_groups_role_dict
-
-    def _update_user_object_roles(self, users_or_authz_groups, current_uors, domain_object):
-        '''Update user object roles for this object.
-
-        :param domain_object: the domain object for whom we are adding the user
-        object role.
-        '''
-        # The permissions grid has been saved
-        # which is a grid of checkboxes named user$role
-        rpi = request.params.items()
-
-        # The grid passes us a list of the users/roles that were displayed
-        submitted = [ a for (a,b) in rpi if (b == u'submitted')]
-        # and also those which were checked
-        checked = [ a for (a,b) in rpi if (b == u'on')]
-
-        # from which we can deduce true/false for each user/role combination
-        # that was displayed in the form
-        table_dict={}
-        for a in submitted:
-            table_dict[a]=False
-        for a in checked:
-            table_dict[a]=True
-
-        # now we'll split up the user$role strings to make a dictionary from 
-        # (user,role) to True/False, which tells us what we need to do.
-        new_user_role_dict={}
-        for (ur,val) in table_dict.items():
-            u,r = ur.split('$')
-            new_user_role_dict[(u,r)] = val
-           
-        if users_or_authz_groups=='users':
-            current_users_roles = [( uor.user.name, uor.role) for uor in current_uors if uor.user]
-        elif users_or_authz_groups=='authz_groups':
-            current_users_roles = [( uor.authorized_group.name, uor.role) for uor in current_uors if uor.authorized_group]        
-        else:
-            assert False, "shouldn't be here"
-
-        current_user_role_dict={}
-        for (u,r) in current_users_roles:
-            current_user_role_dict[(u,r)]=True
-
-        # and now we can loop through our dictionary of desired states
-        # checking whether a change needs to be made, and if so making it
-
-        # Here we check whether someone is already assigned a role, in order
-        # to avoid assigning it twice, or attempting to delete it when it
-        # doesn't exist. Otherwise problems can occur.
-        if users_or_authz_groups=='users':
-            for ((u,r), val) in new_user_role_dict.items():
-                if val:
-                    if not ((u,r) in current_user_role_dict):
-                        model.add_user_to_role(model.User.by_name(u),r,domain_object)
-                else:
-                    if ((u,r) in current_user_role_dict):
-                        model.remove_user_from_role(model.User.by_name(u),r,domain_object)
-        elif users_or_authz_groups=='authz_groups':
-            for ((u,r), val) in new_user_role_dict.items():
-                if val:
-                    if not ((u,r) in current_user_role_dict):
-                        model.add_authorization_group_to_role(model.AuthorizationGroup.by_name(u),r,domain_object)
-                else:
-                    if ((u,r) in current_user_role_dict):
-                        model.remove_authorization_group_from_role(model.AuthorizationGroup.by_name(u),r,domain_object)
-        else:
-            assert False, "shouldn't be here"
-
-        # finally commit the change to the database
-        model.repo.commit_and_remove()
-        h.flash_success(_("Changes Saved"))
-
-    # TODO: this repeats much of _update_user_object_roles
-    def _add_user_object_role(self, users_or_authz_groups, current_uors, domain_object):
-        '''
-        current_uors: in order to avoid either creating a role twice or deleting one which is
-        non-existent, we need to get the users' current roles (if any)
-        '''
-        # The user is attempting to set new roles for a named user
-        new_user = request.params.get('new_user_name')
-        # this is the list of roles whose boxes were ticked
-        checked_roles = [ a for (a,b) in request.params.items() if (b == u'on')]
-        # this is the list of all the roles that were in the submitted form
-        submitted_roles = [ a for (a,b) in request.params.items() if (b == u'submitted')]
-
-        # from this we can make a dictionary of the desired states
-        # i.e. true for the ticked boxes, false for the unticked
-        desired_roles = {}
-        for r in submitted_roles:
-            desired_roles[r]=False
-        for r in checked_roles:
-            desired_roles[r]=True
-
-        if users_or_authz_groups=='users':
-            current_roles = [uor.role for uor in current_uors if ( uor.user and uor.user.name == new_user )]
-            user_object = model.User.by_name(new_user)
-            if user_object==None:
-                # The submitted user does not exist. Bail with flash message
-                h.flash_error(_('unknown user:') + str (new_user))
-            else:
-                # Whenever our desired state is different from our current state, change it.
-                for (r,val) in desired_roles.items():
-                    if val:
-                        if (r not in current_roles):
-                            model.add_user_to_role(user_object, r,
-                                    domain_object)
-                    else:
-                        if (r in current_roles):
-                            model.remove_user_from_role(user_object, r,
-                                    domain_object)
-                h.flash_success(_("User Added"))
-
-        elif users_or_authz_groups=='authz_groups':
-            current_roles = [uor.role for uor in current_uors if ( uor.authorized_group and uor.authorized_group.name == new_user )]
-            user_object = model.AuthorizationGroup.by_name(new_user)
-            if user_object==None:
-                # The submitted user does not exist. Bail with flash message
-                h.flash_error(_('unknown authorization group:') + str (new_user))
-            else:
-                # Whenever our desired state is different from our current state, change it.
-                for (r,val) in desired_roles.items():
-                    if val:
-                        if (r not in current_roles):
-                            model.add_authorization_group_to_role(user_object,
-                                    r, domain_object)
-                    else:
-                        if (r in current_roles):
-                            model.remove_authorization_group_from_role(user_object,
-                                    r, domain_object)
-                h.flash_success(_("Authorization Group Added"))
-
-        else:
-            assert False, "shouldn't be here"
-
-        # and finally commit all these changes to the database
-        model.repo.commit_and_remove()
 
 
 # Include the '_' function in the public names

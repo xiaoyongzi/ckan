@@ -5,20 +5,7 @@
   
   <py:def function="page_title">${c.pkg_dict.get('title', c.pkg_dict['name'])} - Datasets - History</py:def>
   <py:def function="page_heading">History: ${c.pkg.title or c.pkg.name}</py:def>
-
-  <!-- Sidebar -->
-  <!--py:match path="primarysidebar">
-    <li class="widget-container widget_text">
-        <h4>Updates</h4>
-        <p class="atom-feed-link dataset-history-link">
-          <a
-            href="${url(controller='package', action='history', id=c.pkg_dict['name'], format='atom', days=7)}"
-            title="${g.site_title} - Dataset History - ${c.pkg_dict['name']}">
-            Subscribe &raquo;</a>
-        </p>
-    </li>
-  </py:match>
-  -->
+  <py:def function="body_class">no-sidebar</py:def>
   
   <div py:match="content" class="dataset">
     <h3>Revisions</h3>
@@ -33,7 +20,7 @@
       
       <input type="hidden" name="pkg_name" value="${c.pkg_dict['name']}"/>
 
-      <table>
+      <table class="table table-striped table-bordered table-condensed">
         <tr>
           <th></th><th>Revision</th><th>Timestamp</th><th>Author</th><th>Log Message</th>
         </tr>
@@ -47,19 +34,19 @@
               <a href="${h.url_for(controller='revision',action='read',id=rev['id'])}">${rev['id'][:4]}&#8230;</a>
             </td>
             <td>
-              <a href="${h.url_for(controller='package',action='read',id='%s@%s' % (c.pkg_dict['name'], rev['timestamp']))}" title="${'Read dataset as of %s' % rev['timestamp']}">${h.render_datetime(rev['timestamp'])}</a></td>
+              <a href="${h.url_for(controller='package',action='read',id='%s@%s' % (c.pkg_dict['name'], rev['timestamp']))}" title="${_('Read dataset as of %s') % rev['timestamp']}">${h.render_datetime(rev['timestamp'], with_hours=True)}</a></td>
             <td>${h.linked_user(rev['author'])}</td>
             <td>${rev['message']}</td>
           </tr> 
         </py:for>
       </table>
-      <input type="submit" name="diff" value="${_('Compare &raquo;')}" class="pretty-button primary" />
+      <input type="submit" name="diff" value="${_('Compare &raquo;')}" class="btn btn-primary" />
     </form>
-  </div> <!-- content -->
+  </div>
 
   <py:def function="optional_feed">
   <link rel="alternate" type="application/atom+xml" title="Dataset History"
-    href="${url(controller='package', action='history', id=c.pkg_dict['name'], format='atom', days=7)}" />
+    href="${h.url(controller='package', action='history', id=c.pkg_dict['name'], format='atom', days=7)}" />
   </py:def>
 
   <xi:include href="layout.html" />

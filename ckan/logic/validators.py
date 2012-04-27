@@ -1,5 +1,7 @@
-import re
 import datetime
+from pylons.i18n import _
+from itertools import count
+import re
 from pylons.i18n import _, ungettext, N_, gettext
 from ckan.lib.navl.dictization_functions import Invalid, Missing, missing, unflatten
 from ckan.authz import Authorizer
@@ -7,14 +9,16 @@ from ckan.logic import check_access, NotAuthorized
 from ckan.lib.helpers import date_str_to_datetime
 from ckan.model import (MAX_TAG_LENGTH, MIN_TAG_LENGTH,
                         PACKAGE_NAME_MIN_LENGTH, PACKAGE_NAME_MAX_LENGTH,
-                        PACKAGE_VERSION_MAX_LENGTH)
+                        PACKAGE_VERSION_MAX_LENGTH,
+                        VOCABULARY_NAME_MAX_LENGTH,
+                        VOCABULARY_NAME_MIN_LENGTH)
 
 def package_id_not_changed(value, context):
 
     package = context.get('package')
     if package and value != package.id:
-        raise Invalid(_('Cannot change value of key from %s to %s. '
-                        'This key is read-only') % (package.id, value))
+        raise Invalid('Cannot change value of key from %s to %s. '
+                      'This key is read-only' % (package.id, value))
     return value
 
 def int_validator(value, context):
@@ -54,7 +58,7 @@ def package_id_exists(value, context):
 
     result = session.query(model.Package).get(value)
     if not result:
-        raise Invalid(_('Dataset was not found.'))
+        raise Invalid('%s: %s' % (_('Not found'), _('Dataset')))
     return value
 
 def package_name_exists(value, context):
@@ -65,7 +69,7 @@ def package_name_exists(value, context):
     result = session.query(model.Package).filter_by(name=value).first()
 
     if not result:
-        raise Invalid(_('Dataset with name %r does not exist.') % str(value))
+        raise Invalid(_('Not found') + ': %r' % str(value))
     return value
 
 def package_id_or_name_exists(value, context):
@@ -80,9 +84,91 @@ def package_id_or_name_exists(value, context):
     result = session.query(model.Package).filter_by(name=value).first()
 
     if not result:
-        raise Invalid(_('Dataset was not found.'))
+        raise Invalid('%s: %s' % (_('Not found'), _('Dataset')))
 
     return result.id
+
+def user_id_exists(user_id, context):
+    """Raises Invalid if the given user_id does not exist in the model given
+    in the context, otherwise returns the given user_id.
+
+    """
+    model = context['model']
+    session = context['session']
+
+    result = session.query(model.User).get(user_id)
+    if not result:
+        raise Invalid('%s: %s' % (_('Not found'), _('User')))
+    return user_id
+
+def group_id_exists(group_id, context):
+    """Raises Invalid if the given group_id does not exist in the model given
+    in the context, otherwise returns the given group_id.
+
+    """
+    model = context['model']
+    session = context['session']
+
+    result = session.query(model.Group).get(group_id)
+    if not result:
+        raise Invalid('%s: %s' % (_('Not found'), _('Group')))
+    return group_id
+
+def group_id_or_name_exists(reference, context):
+    """
+    Raises Invalid if a group identified by the name or id cannot be found.
+    """
+    model = context['model']
+    result = model.Group.get(reference)
+    if not result:
+        raise Invalid(_('That group name or ID does not exist.'))
+    return reference
+
+def activity_type_exists(activity_type):
+    """Raises Invalid if there is no registered activity renderer for the
+    given activity_type. Otherwise returns the given activity_type.
+
+    """
+    from ckan.logic.action.get import activity_renderers
+    if activity_renderers.has_key(activity_type):
+        return activity_type
+    else:
+        raise Invalid('%s: %s' % (_('Not found'), _('Activity type')))
+
+# A dictionary mapping activity_type values from activity dicts to functions
+# for validating the object_id values from those same activity dicts.
+object_id_validators = {
+    'new package' : package_id_exists,
+    'changed package' : package_id_exists,
+    'deleted package' : package_id_exists,
+    'new user' : user_id_exists,
+    'changed user' : user_id_exists,
+    'new group' : group_id_exists,
+    'changed group' : group_id_exists,
+    'deleted group' : group_id_exists,
+    }
+
+def object_id_validator(key, activity_dict, errors, context):
+    """Validate the 'object_id' value of an activity_dict.
+
+    Uses the object_id_validators dict (above) to find and call an 'object_id'
+    validator function for the given activity_dict's 'activity_type' value.
+
+    Raises Invalid if the model given in context contains no object of the
+    correct type (according to the 'activity_type' value of the activity_dict)
+    with the given ID.
+
+    Raises Invalid if there is no object_id_validator for the activity_dict's
+    'activity_type' value.
+
+    """
+    activity_type = activity_dict[('activity_type',)]
+    if object_id_validators.has_key(activity_type):
+        object_id = activity_dict[('object_id',)]
+        return object_id_validators[activity_type](object_id, context)
+    else:
+        raise Invalid('There is no object_id validator for '
+            'activity type "%s"' % str(activity_type))
 
 def extras_unicode_convert(extras, context):
     for extra in extras:
@@ -92,6 +178,9 @@ def extras_unicode_convert(extras, context):
 name_match = re.compile('[a-z0-9_\-]*$')
 def name_validator(val, context):
     # check basic textual rules
+    if val in ['new', 'edit', 'search']:
+        raise Invalid(_('That name cannot be used'))
+
     if len(val) < 2:
         raise Invalid(_('Name must be at least %s characters long') % 2)
     if len(val) > PACKAGE_NAME_MAX_LENGTH:
@@ -193,19 +282,20 @@ def tag_not_uppercase(value, context):
     return value
 
 def tag_string_convert(key, data, errors, context):
+    '''Takes a list of tags that is a comma-separated string (in data[key])
+    and parses tag names. These are added to the data dict, enumerated. They
+    are also validated.'''
 
-    value = data[key]
+    if isinstance(data[key], basestring):
+        tags = [tag.strip() \
+                for tag in data[key].split(',') \
+                if tag.strip()]
+    else:
+        tags = data[key]
 
-    # Ensure a tag string with only whitespace
-    # is converted to the empty list of tags.
-    # If we were to split(',') on this string,
-    # we'd get the non-empty list, [''].
-    if not value.strip():
-        return
+    current_index = max( [int(k[1]) for k in data.keys() if len(k) == 3 and k[0] == 'tags'] + [-1] )
 
-    tags = map(lambda s: s.strip(),
-               value.split(','))
-    for num, tag in enumerate(tags):
+    for num, tag in zip(count(current_index+1), tags):
         data[('tags', num, 'name')] = tag
 
     for tag in tags:
@@ -221,6 +311,9 @@ def ignore_not_package_admin(key, data, errors, context):
 
     model = context['model']
     user = context.get('user')
+
+    if 'ignore_auth' in context:
+        return
 
     if user and Authorizer.is_sysadmin(user):
         return
@@ -318,3 +411,68 @@ def user_about_validator(value,context):
         raise Invalid(_('Edit not allowed as it looks like spam. Please avoid links in your description.'))
 
     return value
+
+def vocabulary_name_validator(name, context):
+    model = context['model']
+    session = context['session']
+
+    if len(name) < VOCABULARY_NAME_MIN_LENGTH:
+        raise Invalid(_('Name must be at least %s characters long') %
+            VOCABULARY_NAME_MIN_LENGTH)
+    if len(name) > VOCABULARY_NAME_MAX_LENGTH:
+        raise Invalid(_('Name must be a maximum of %i characters long') %
+                      VOCABULARY_NAME_MAX_LENGTH)
+    query = session.query(model.Vocabulary.name).filter_by(name=name)
+    result = query.first()
+    if result:
+        raise Invalid(_('That vocabulary name is already in use.'))
+    return name
+
+def vocabulary_id_not_changed(value, context):
+    vocabulary = context.get('vocabulary')
+    if vocabulary and value != vocabulary.id:
+        raise Invalid(_('Cannot change value of key from %s to %s. '
+                        'This key is read-only') % (vocabulary.id, value))
+    return value
+
+def vocabulary_id_exists(value, context):
+    model = context['model']
+    session = context['session']
+    result = session.query(model.Vocabulary).get(value)
+    if not result:
+        raise Invalid(_('Tag vocabulary was not found.'))
+    return value
+
+def tag_in_vocabulary_validator(value, context):
+    model = context['model']
+    session = context['session']
+    vocabulary = context.get('vocabulary')
+    if vocabulary:
+        query = session.query(model.Tag)\
+            .filter(model.Tag.vocabulary_id==vocabulary.id)\
+            .filter(model.Tag.name==value)\
+            .count()
+        if not query:
+            raise Invalid(_('Tag %s does not belong to vocabulary %s') % (value, vocabulary.name))
+    return value
+
+def tag_not_in_vocabulary(key, tag_dict, errors, context):
+    tag_name = tag_dict[('name',)]
+    if not tag_name:
+        raise Invalid(_('No tag name'))
+    if tag_dict.has_key(('vocabulary_id',)):
+        vocabulary_id = tag_dict[('vocabulary_id',)]
+    else:
+        vocabulary_id = None
+    model = context['model']
+    session = context['session']
+
+    query = session.query(model.Tag)
+    query = query.filter(model.Tag.vocabulary_id==vocabulary_id)
+    query = query.filter(model.Tag.name==tag_name)
+    count = query.count()
+    if count > 0:
+        raise Invalid(_('Tag %s already belongs to vocabulary %s') %
+                (tag_name, vocabulary_id))
+    else:
+        return

@@ -112,9 +112,10 @@ ckan_create_config_file () {
         fi
         sed -e "s,^\(email_to\)[ =].*,\1 = root," \
             -e "s,^\(error_email_from\)[ =].*,\1 = ckan-${INSTANCE}@`hostname`," \
+            -e "s,# ckan\.site_id = ckan.net,ckan.site_id = ${INSTANCE}," \
             -e "s,^\(cache_dir\)[ =].*,\1 = /var/lib/ckan/${INSTANCE}/data," \
             -e "s,^\(who\.config_file\)[ =].*,\1 = /etc/ckan/${INSTANCE}/who.ini," \
-            -e "s,ckan\.log,/var/log/ckan/${INSTANCE}/${INSTANCE}.log," \
+            -e "s,\"ckan\.log\",\"/var/log/ckan/${INSTANCE}/${INSTANCE}.log\"," \
             -e "s,#solr_url = http://127.0.0.1:8983/solr,solr_url = http://127.0.0.1:8983/solr," \
             -i /etc/ckan/${INSTANCE}/${INSTANCE}.ini
         sudo chown ckan${INSTANCE}:ckan${INSTANCE} /etc/ckan/${INSTANCE}/${INSTANCE}.ini
@@ -151,7 +152,7 @@ ckan_ensure_db_exists () {
         exit 1
     else
         INSTANCE=$1
-        COMMAND_OUTPUT=`sudo -u postgres psql -l`
+        COMMAND_OUTPUT=`sudo -u postgres psql -c "select datname from pg_database where datname='$INSTANCE'"`
         if ! [[ "$COMMAND_OUTPUT" =~ ${INSTANCE} ]] ; then
             echo "Creating the database ..."
             sudo -u postgres createdb -O ${INSTANCE} ${INSTANCE}
@@ -175,6 +176,9 @@ ckan_create_wsgi_handler () {
             sudo -u ckan${INSTANCE} virtualenv --setuptools /var/lib/ckan/${INSTANCE}/pyenv
             echo "Attempting to install 'pip' 1.0 from pypi.python.org into pyenv to be used for extensions ..."
             sudo -u ckan${INSTANCE} /var/lib/ckan/${INSTANCE}/pyenv/bin/easy_install --upgrade "pip>=1.0" "pip<=1.0.99"
+            echo "done."
+            echo "Attempting to install 'paster' pypi.python.org into pyenv ..."
+            sudo -u ckan${INSTANCE} /var/lib/ckan/${INSTANCE}/pyenv/bin/easy_install --ignore-installed "pastescript"
             echo "done."
             cat <<- EOF > /var/lib/ckan/${INSTANCE}/packaging_version.txt
 	1.5
@@ -216,11 +220,11 @@ ckan_overwrite_apache_config () {
         #rm /etc/apache2/sites-available/${INSTANCE}.common
         cat <<EOF > /etc/apache2/sites-available/${INSTANCE}.common
 
-    # WARNING: Do not manually edit this file, it is desgined to be 
+    # WARNING: Do not manually edit this file, it is designed to be 
     #          overwritten at any time by the postinst script of 
     #          dependent packages
 
-    # These are common settings used for both the normal and maintence modes
+    # These are common settings used for both the normal and maintenance modes
 
     DocumentRoot /var/lib/ckan/${INSTANCE}/static
     ServerName ${ServerName}
@@ -262,7 +266,7 @@ EOF
         #rm /etc/apache2/sites-available/${INSTANCE}
         cat <<EOF > /etc/apache2/sites-available/${INSTANCE} 
 <VirtualHost *:80>
-    # WARNING: Do not manually edit this file, it is desgined to be 
+    # WARNING: Do not manually edit this file, it is designed to be 
     #          overwritten at any time by the postinst script of 
     #          dependent packages
     Include /etc/apache2/sites-available/${INSTANCE}.common
@@ -271,7 +275,7 @@ EOF
         #rm /etc/apache2/sites-available/${INSTANCE}.maint
         cat <<EOF > /etc/apache2/sites-available/${INSTANCE}.maint
 <VirtualHost *:80>
-    # WARNING: Do not manually edit this file, it is desgined to be 
+    # WARNING: Do not manually edit this file, it is designed to be 
     #          overwritten at any time by the postinst script of 
     #          dependent packages
     Include /etc/apache2/sites-available/${INSTANCE}.common

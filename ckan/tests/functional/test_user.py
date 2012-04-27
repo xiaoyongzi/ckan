@@ -1,5 +1,7 @@
 from routes import url_for
 from nose.tools import assert_equal
+from pylons import config
+import hashlib
 
 from pprint import pprint
 from ckan.tests import search_related, CreateTestData
@@ -12,7 +14,13 @@ from ckan.lib.mailer import get_reset_link, create_reset_key
 
 class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, SmtpServerHarness):
     @classmethod
-    def setup_class(self):
+    def setup_class(cls):
+        smtp_server = config.get('test_smtp_server')
+        if smtp_server:
+            host, port = smtp_server.split(':')
+            port = int(port) + int(str(hashlib.md5(cls.__name__).hexdigest())[0], 16)
+            config['test_smtp_server'] = '%s:%s' % (host, port)
+
         PylonsTestCase.setup_class()
         SmtpServerHarness.setup_class()
         CreateTestData.create()
@@ -32,6 +40,8 @@ class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, S
 
     @classmethod
     def teardown_class(self):
+        # clear routes 'id' so that next test to run doesn't get it
+        self.app.get(url_for(controller='user', action='login', id=None))
         SmtpServerHarness.teardown_class()
         model.repo.rebuild_db()
 
@@ -46,7 +56,7 @@ class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, S
         main_res = self.main_div(res)
         assert 'annafan' in res, res
         assert 'Logged in' not in main_res, main_res
-        assert 'My Account' not in main_res, main_res
+        assert 'checkpoint:is-myself' not in main_res, main_res
         assert 'about' in main_res, main_res
         assert 'I love reading Annakarenina' in res, main_res
         self.check_named_element(res, 'a',
@@ -54,9 +64,6 @@ class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, S
                                  'target="_blank"',
                                  'rel="nofollow"')
         assert 'Edit Profile' not in main_res, main_res
-        assert 'Number of edits:</strong> 3' in res, res
-        assert 'Number of datasets administered:</strong> 1' in res, res
-        assert 'Revision History' in res, res
 
     def test_user_read_without_id(self):
         offset = '/user/'
@@ -68,11 +75,11 @@ class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, S
 
     def test_user_read_without_id_but_logged_in(self):
         user = model.User.by_name(u'annafan')
-        offset = '/user/'
+        offset = '/user/annafan'
         res = self.app.get(offset, status=200, extra_environ={'REMOTE_USER': str(user.name)})
         main_res = self.main_div(res)
         assert 'annafan' in main_res, main_res
-        assert 'My Account' in main_res, main_res
+        assert 'checkpoint:is-myself' in main_res, main_res
 
     def test_user_read_logged_in(self):
         user = model.User.by_name(u'annafan')
@@ -80,7 +87,7 @@ class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, S
         res = self.app.get(offset, extra_environ={'REMOTE_USER': str(user.name)})
         main_res = self.main_div(res)
         assert 'annafan' in res, res
-        assert 'My Account' in main_res, main_res
+        assert 'checkpoint:is-myself' in main_res, main_res
         assert 'Edit Profile' in main_res, main_res
 
     def test_user_read_about_unfinished(self):
@@ -136,6 +143,7 @@ class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, S
     def test_logout(self):
         res = self.app.get('/user/logout')
         res2 = res.follow()
+        res2 = res2.follow()
         assert 'You have logged out successfully.' in res2, res2
 
     def _get_cookie_headers(self, res):
@@ -160,24 +168,29 @@ class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, S
         fv = res.forms['login']
         fv['login'] = str(username)
         fv['password'] = str(password)
+        fv['remember'] = False
         res = fv.submit()
 
         # check cookies set
         cookies = self._get_cookie_headers(res)
         assert cookies
+        for cookie in cookies:
+            assert not 'max-age' in cookie.lower(), cookie
 
         # first get redirected to user/logged_in
         assert_equal(res.status, 302)
-        assert res.header('Location').startswith('http://localhost/user/logged_in')
+        assert res.header('Location').startswith('http://localhost/user/logged_in') or \
+               res.header('Location').startswith('/user/logged_in')
 
         # then get redirected to user page
         res = res.follow()
         assert_equal(res.status, 302)
-        assert_equal(res.header('Location'), 'http://localhost/user/testlogin')
+        assert res.header('Location').startswith('http://localhost/user/testlogin') or \
+               res.header('Location').startswith('/user/testlogin')
         res = res.follow()
         assert_equal(res.status, 200)
         assert 'testlogin is now logged in' in res.body
-        assert 'My Account' in res.body
+        assert 'checkpoint:is-myself' in res.body
 
         # check user object created
         user = model.User.by_name(username)
@@ -187,15 +200,40 @@ class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, S
 
         # check cookie created
         cookie = res.request.environ['HTTP_COOKIE']
-        # I think some versions of webob do not produce quotes, hence the 'or'
-        assert 'ckan_display_name="testlogin"' in cookie or \
-               'ckan_display_name=testlogin' in cookie, cookie
         assert 'auth_tkt=' in cookie, cookie
         assert 'testlogin!userid_type:unicode' in cookie, cookie
 
         # navigate to another page and check username still displayed
+        print res.body
         res = res.click('Search')
+        print res
         assert 'testlogin' in res.body, res.body
+
+    def test_login_remembered(self):
+        # create test user
+        username = u'testlogin2'
+        password = u'letmein'
+        CreateTestData.create_user(name=username,
+                                   password=password)
+        user = model.User.by_name(username)
+
+        # do the login
+        offset = url_for(controller='user', action='login')
+        res = self.app.get(offset)
+        fv = res.forms['login']
+        fv['login'] = str(username)
+        fv['password'] = str(password)
+        fv['remember'] = True
+        res = fv.submit()
+
+        # check cookies set
+        cookies = self._get_cookie_headers(res)
+        assert cookies
+        # check cookie is remembered via Max-Age and Expires
+        # (both needed for cross-browser compatibility)
+        for cookie in cookies:
+            assert 'Max-Age=63072000;' in cookie, cookie
+            assert 'Expires=' in cookie, cookie
 
     def test_login_wrong_password(self):
         # create test user
@@ -215,23 +253,147 @@ class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, S
 
         # first get redirected to logged_in
         assert_equal(res.status, 302)
-        assert res.header('Location').startswith('http://localhost/user/logged_in')
+        assert res.header('Location').startswith('http://localhost/user/logged_in') or \
+               res.header('Location').startswith('/user/logged_in')
 
         # then get redirected to login
         res = res.follow()
         assert_equal(res.status, 302)
-        assert res.header('Location').startswith('http://localhost/user/login')
+        assert res.header('Location').startswith('http://localhost/user/login') or \
+               res.header('Location').startswith('/user/login')
         res = res.follow()
         assert_equal(res.status, 200)
         assert 'Login failed. Bad username or password.' in res.body
         assert 'Login:' in res.body
 
+    def test_relogin(self):
+        '''Login as user A and then (try to) login as user B (without
+        logout). #1799.'''
+        # create test users A & B
+        password = u'letmein'
+        CreateTestData.create_user(name=u'user_a',
+                                   password=password)
+        CreateTestData.create_user(name=u'user_b',
+                                   password=password)
+        userA = model.User.by_name(u'user_a')
+        userB = model.User.by_name(u'user_b')
 
-    # -----------
-    # tests for top links present in every page
-     # TODO: test sign in results in:
-     # a) a username at top of page
-     # b) logout link
+        # do the login
+        offset = url_for(controller='user', action='login')
+        res = self.app.get(offset)
+        fv = res.forms['login']
+        fv['login'] = 'user_a'
+        fv['password'] = str(password)
+        res = fv.submit()
+        while res.status == 302:
+            res = res.follow()
+        assert_equal(res.status, 200)
+
+        # login as userB
+        offset = url_for(controller='user', action='login')
+        res = self.app.get(offset)
+        assert not res.forms.has_key('login') # i.e. no login box is presented
+        assert 'To register or log in as another user' in res.body, res.body
+        assert 'logout' in res.body, res.body
+
+        # Test code left commented - shows the problem if you
+        # let people try to login whilst still logged in. #1799
+##        fv['login'] = 'user_b'
+##        fv['password'] = str(password)
+##        res = fv.submit()
+##        while res.status == 302:
+##            res = res.follow()
+##        assert_equal(res.status, 200)
+
+##        offset = url_for(controller='user', action='me')
+##        res = self.app.get(offset)
+##        assert_equal(res.status, 302)
+##        res = res.follow()
+##        assert 'user_b' in res
+
+    def test_try_to_register_whilst_logged_in(self):
+        '''Login as user A and then (try to) register user B (without
+        logout). #1799.'''
+        # create user A
+        password = u'letmein'
+        CreateTestData.create_user(name=u'user_a_',
+                                   password=password)
+        userA = model.User.by_name(u'user_a_')
+
+        # do the login
+        offset = url_for(controller='user', action='login')
+        res = self.app.get(offset)
+        fv = res.forms['login']
+        fv['login'] = 'user_a_'
+        fv['password'] = str(password)
+        res = fv.submit()
+        while res.status == 302:
+            res = res.follow()
+        assert_equal(res.status, 200)
+
+        # try to register
+        offset = url_for(controller='user', action='register')
+        res = self.app.get(offset)
+        assert not res.forms.has_key('Password') # i.e. no registration form
+        assert 'To register or log in as another user' in res.body, res.body
+        assert 'logout' in res.body, res.body
+
+    def test_register_whilst_logged_in(self):
+        '''Start registration form as user B then in another window login
+        as user A, and then try and then submit form for user B. #1799.'''
+        # create user A
+        password = u'letmein'
+        CreateTestData.create_user(name=u'user_a__',
+                                   password=password)
+        userA = model.User.by_name(u'user_a__')
+        # make him a sysadmin, to ensure he is allowed to create a user
+        model.add_user_to_role(userA, model.Role.ADMIN, model.System())
+        model.repo.commit_and_remove()
+        userA = model.User.by_name(u'user_a__')
+
+        # start to register user B
+        offset = url_for(controller='user', action='register')
+        res = self.app.get(offset)
+        fvA = res.forms['user-edit']
+        fvA['name'] = 'user_b_'
+        fvA['fullname'] = 'User B'
+        fvA['email'] = 'user@b.com'
+        fvA['password1'] = password
+        fvA['password2'] = password
+
+        # login user A
+        offset = url_for(controller='user', action='login')
+        res = self.app.get(offset)
+        fvB = res.forms['login']
+        fvB['login'] = 'user_a__'
+        fvB['password'] = str(password)
+        res = fvB.submit()
+        while res.status == 302:
+            res = res.follow()
+        assert_equal(res.status, 200)
+
+        # finish registration of user B
+        res = fvA.submit('save')
+        assert_equal(res.status, 200)
+        assert 'user_a__</a> is currently logged in' in res.body, res.body
+        assert 'User "user_b_" is now registered but you are still logged in as "user_a__" from before'.replace('"', '&#34;') in res.body, res.body
+        assert 'logout' in res.body, res.body
+
+        # logout and login as user B
+        res = self.app.get('/user/logout')
+        res2 = res.follow()
+        res2 = res2.follow()
+        assert 'You have logged out successfully.' in res2, res2
+        offset = url_for(controller='user', action='login')
+        res = self.app.get(offset)
+        fv = res.forms['login']
+        fv['login'] = 'user_b_'
+        fv['password'] = str(password)
+        res = fv.submit()
+        while res.status == 302:
+            res = res.follow()
+        assert_equal(res.status, 200)
+        assert 'User B is now logged in' in res.body, res.body
 
     @search_related
     def test_home_login(self):
@@ -256,7 +418,7 @@ class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, S
 
         offset = url_for(controller='user', action='read', id='okfntest')
         res = self.app.get(offset, extra_environ={'REMOTE_USER': 'okfntest'})
-        assert 'Your API key is: %s' % user.apikey in res, res
+        assert user.apikey in res, res
 
     def test_user_create(self):
         # create/register user
@@ -306,9 +468,6 @@ class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, S
 
         # check cookies created
         cookie = res.request.environ['HTTP_COOKIE']
-        # I think some versions of webob do not produce quotes, hence the 'or'
-        assert 'ckan_display_name="Test Create"' in cookie or\
-               'ckan_display_name=Test Create' in cookie, cookie
         assert 'auth_tkt=' in cookie, cookie
         assert 'testcreate!userid_type:unicode' in cookie, cookie
 
@@ -747,7 +906,7 @@ class TestUserController(FunctionalTestCase, HtmlCheckMethods, PylonsTestCase, S
         fv['user'] = 'kittens'
         res = fv.submit()
         assert_equal(res.status, 302)
-        assert_equal(res.header_dict['Location'], 'http://localhost/')
+        assert_equal(res.header_dict['Location'], 'http://localhost/?__no_cache__=True')
 
         CreateTestData.create_user(name='larry2', fullname='kittens')
         res = self.app.get(offset)

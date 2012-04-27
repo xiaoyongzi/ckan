@@ -37,6 +37,9 @@ class TestBasicDictize:
         for key, value in dict.items():
             if key.endswith('id') and key <> 'license_id':
                 dict.pop(key)
+            if key == 'created':
+                dict.pop(key)
+
             if isinstance(value, list):
                 for new_dict in value:
                     self.remove_changable_columns(new_dict)
@@ -71,10 +74,15 @@ class TestBasicDictize:
         pprint(errors)
         assert converted_data == {'extras': [{'key': u'genre', 'value': u'"romantic novel"'},
                                             {'key': u'original media', 'value': u'"book"'}],
-                                 'groups': [{'name': u'david'}, {'name': u'roger'}],
+                                   'groups': [{u'name': u'david',
+                                               u'title': u"Dave's books"},
+                                              {u'name': u'roger',
+                                               u'title': u"Roger's books",
+                                               }],
                                  'license_id': u'other-open',
                                  'name': u'anna2',
-                                 'notes': u'Some test notes\n\n### A 3rd level heading\n\n**Some bolded text.**\n\n*Some italicized text.*\n\nForeign characters:\nu with umlaut \xfc\n66-style quote \u201c\nforeign word: th\xfcmb\n \nNeeds escaping:\nleft arrow <\n\n<http://ckan.net/>\n\n',
+                                 'language': u'en',
+                                 'notes': u'Some test notes\n\n### A 3rd level heading\n\n**Some bolded text.**\n\n*Some italicized text.*\n\nForeign characters:\nu with umlaut \xfc\n66-style quote \u201c\nforeign word: th\xfcmb\n\nNeeds escaping:\nleft arrow <\n\n<http://ckan.net/>\n\n',
                                  'resources': [{'alt_url': u'alt123',
                                                 'description': u'Full text. Needs escaping: " Umlaut: \xfc',
                                                 'format': u'plain text',
@@ -102,7 +110,7 @@ class TestBasicDictize:
         data['name'] = u'annakarenina'
         data.pop("title")
         data["resources"][0]["url"] = 'fsdfafasfsaf'
-        data["resources"][1].pop("url") 
+        data["resources"][1].pop("url")
 
         converted_data, errors = validate(data, default_package_schema(), self.context)
 
@@ -141,10 +149,17 @@ class TestBasicDictize:
         expected = {'description': u'These are books that David likes.',
                                  'id': group.id,
                                  'name': u'david',
-                                 'packages': sorted([{'id': group_pack[0].id},
+                                 'type': u'group',
+                                 'image_url': u'',
+                                 'packages': sorted([{'id': group_pack[0].id,
+                                                    'name': group_pack[0].name,
+                                                    'title': group_pack[0].title},
                                               {'id': group_pack[1].id,
-                                               }], key=lambda x:x["id"]),
-                                 'title': u"Dave's books"}
+                                              'name': group_pack[1].name,
+                                              'title':group_pack[1].title}],
+                                              key=lambda x:x["id"]),
+                                 'title': u"Dave's books",
+                                 'approval_status': u'approved'}
 
 
         assert not errors
@@ -158,14 +173,14 @@ class TestBasicDictize:
         data["packages"][1].pop("name")
 
         converted_data, errors = validate(data, default_group_schema(), self.context)
-        assert errors ==  {'packages': [{'id': [u'Dataset was not found.']}, {'id': [u'Missing value']}]} , pformat(errors)
+        assert errors ==  {'packages': [{'id': [u'Not found: Dataset']}, {'id': [u'Missing value']}]} , pformat(errors)
 
     def test_3_tag_schema_allows_spaces(self):
         """Asserts that a tag name with space is valid"""
         ignored = ""
         data = {
             'name': u'with space',
-            'revision_timestamp': ignored, 
+            'revision_timestamp': ignored,
             'state': ignored
             }
 

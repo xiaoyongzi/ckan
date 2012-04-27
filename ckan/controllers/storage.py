@@ -30,10 +30,8 @@ from logging import getLogger
 log = getLogger(__name__)
 
 
-# pairtree_version0_1 file for identifying folders
-BUCKET = config['storage.bucket']
-key_prefix = config.get('storage.key_prefix', 'file/')
-storage_dir = config.get('storage.directory', '')
+BUCKET = config.get('ckan.storage.bucket', 'default')
+key_prefix = config.get('ckan.storage.key_prefix', 'file/')
 
 _eq_re = re.compile(r"^(.*)(=[0-9]*)$")
 def fix_stupid_pylons_encoding(data):
@@ -48,37 +46,43 @@ def fix_stupid_pylons_encoding(data):
         data = m.groups()[0]
     return data
 
+def create_pairtree_marker(folder):
+    """ Creates the pairtree marker for tests if it doesn't exist """
+    if not folder[:-1] == '/':
+        folder = folder + '/'
+
+    directory = os.path.dirname(folder)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    target = os.path.join(directory, 'pairtree_version0_1')
+    if os.path.exists(target):
+        return
+
+    open( target, 'wb').close()
+
 
 def get_ofs():
+    """Return a configured instance of the appropriate OFS driver.
     """
-    Return a configured instance of the appropriate OFS driver, in all
-    cases here this will be the local file storage so we fix the implementation
-    to use pairtree.
-    """
-    return get_impl("pairtree")(storage_dir=storage_dir)
+    storage_backend = config['ofs.impl']
+    kw = {}
+    for k,v in config.items():
+        if not k.startswith('ofs.') or k == 'ofs.impl':
+            continue
+        kw[k[4:]] = v
 
+    # Make sure we have created the marker file to avoid pairtree issues
+    if storage_backend == 'pairtree' and 'storage_dir' in kw:
+        create_pairtree_marker( kw['storage_dir'] )
 
-pairtree_marker_done = False
-def create_pairtree_marker():
-    """
-    Make sure that the file pairtree_version0_1 is present in storage_dir
-    and if not then create it.
-    """
-    global pairtree_marker_done
-    if pairtree_marker_done or not storage_dir:
-        return
-        
-    path = os.path.join(storage_dir, 'pairtree_version0_1')
-    if not os.path.exists( path ):
-        open(path, 'w').close() 
-        
-    pairtree_marker_done = True
-            
+    ofs = get_impl(storage_backend)(**kw)
+    return ofs
 
 
 def authorize(method, bucket, key, user, ofs):
     """
-    Check authz for the user with a given bucket/key combo within a 
+    Check authz for the user with a given bucket/key combo within a
     particular ofs implementation.
     """
     if not method in ['POST', 'GET', 'PUT', 'DELETE']:
@@ -89,7 +93,7 @@ def authorize(method, bucket, key, user, ofs):
             abort(409)
         # now check user stuff
         username = user.name if user else ''
-        is_authorized = authz.Authorizer.is_authorized(username, 'file-upload', model.System()) 
+        is_authorized = authz.Authorizer.is_authorized(username, 'file-upload', model.System())
         if not is_authorized:
             h.flash_error('Not authorized to upload files.')
             abort(401)
@@ -99,22 +103,19 @@ def authorize(method, bucket, key, user, ofs):
 class StorageController(BaseController):
     '''Upload to storage backend.
     '''
-    def __before__(self, action, **params):
-        super(StorageController, self).__before__(action, **params)
-        if not storage_dir:
-            abort(404)
-        else:
-            create_pairtree_marker()            
-    
+    _ofs_impl = None
+
     @property
     def ofs(self):
-        return get_ofs()
+        if not StorageController._ofs_impl:
+            StorageController._ofs_impl = get_ofs()
+        return StorageController._ofs_impl
 
 
     def upload(self):
         label = key_prefix + request.params.get('filepath', str(uuid.uuid4()))
         c.data = {
-            'action': h.url_for('storage_upload_handle'),
+            'action': h.url_for('storage_upload_handle', qualified=False),
             'fields': [
                 {
                     'name': 'key',
@@ -138,7 +139,7 @@ class StorageController(BaseController):
         params['filename-original'] = stream.filename
         #params['_owner'] = c.userobj.name if c.userobj else ""
         params['uploaded-by'] = c.userobj.name if c.userobj else ""
-        
+
         self.ofs.put_stream(bucket_id, label, stream.file, params)
         success_action_redirect = h.url_for('storage_upload_success', qualified=True,
                 bucket=BUCKET, label=label)
@@ -150,10 +151,10 @@ class StorageController(BaseController):
         label=request.params.get('label', label)
         h.flash_success('Upload successful')
         c.file_url = h.url_for('storage_file',
-                label=label, 
+                label=label,
                 qualified=True
                 )
-        c.upload_url = h.url_for('storage_upload')        
+        c.upload_url = h.url_for('storage_upload')
         return render('storage/success.html')
 
     def success_empty(self, label=None):
@@ -172,7 +173,7 @@ class StorageController(BaseController):
                 h.redirect_to(file_url)
             else:
                 abort(404)
-                
+
         file_url = self.ofs.get_url(BUCKET, label)
         if file_url.startswith("file://"):
             metadata = self.ofs.get_metadata(BUCKET, label)
@@ -189,17 +190,14 @@ class StorageController(BaseController):
 
 class StorageAPIController(BaseController):
 
-    def __before__(self, action, **params):
-        super(StorageAPIController, self).__before__(action, **params)
-        if not storage_dir:
-            abort(404)
-        else:
-            create_pairtree_marker()
-            
+    _ofs_impl = None
+
     @property
     def ofs(self):
-        return get_ofs()
-    
+        if not StorageAPIController._ofs_impl:
+            StorageAPIController._ofs_impl = get_ofs()
+        return StorageAPIController._ofs_impl
+
     @jsonpify
     def index(self):
         info = {
@@ -227,12 +225,12 @@ class StorageAPIController(BaseController):
                 metadata = {}
         except:
             abort(400)
-            
+
         try:
             b = self.ofs._require_bucket(bucket)
         except:
             abort(409)
-            
+
         k = self.ofs._get_key(b, label)
         if k is None:
             k = b.new_key(label)
@@ -250,20 +248,26 @@ class StorageAPIController(BaseController):
                 self.ofs.del_metadata_keys(bucket, label, to_delete)
             self.ofs.update_metadata(bucket, label, metadata)
         else:
-            self.ofs.update_metadata(bucket, label, metadata)            
+            self.ofs.update_metadata(bucket, label, metadata)
 
         k.make_public()
         k.close()
-        
+
         return self.get_metadata(bucket, label)
-    
+
     @jsonpify
     def get_metadata(self, label):
         bucket = BUCKET
-        url = h.url_for('storage_file',
-                label=label,
-                qualified=True
-                )
+        storage_backend = config['ofs.impl']
+        if storage_backend in ['google', 's3']:
+            if not label.startswith("/"):
+                label = "/" + label
+            url = "https://%s/%s%s" % (self.ofs.conn.server_name(), bucket, label)
+        else:
+            url = h.url_for('storage_file',
+                    label=label,
+                    qualified=False
+                    )
         if not self.ofs.exists(bucket, label):
             abort(404)
         metadata = self.ofs.get_metadata(bucket, label)
@@ -313,7 +317,7 @@ class StorageAPIController(BaseController):
             method = 'POST'
 
         authorize(method, bucket, label, c.userobj, self.ofs)
-            
+
         http_request = self.ofs.authenticate_request(method, bucket, label,
                 headers)
         return {
@@ -326,12 +330,12 @@ class StorageAPIController(BaseController):
     def _get_remote_form_data(self, label):
         method = 'POST'
         content_length_range = int(
-                config.get('ckanext.storage.max_content_length',
+                config.get('ckan.storage.max_content_length',
                     50000000))
         acl = 'public-read'
         fields = [ {
                 'name': self.ofs.conn.provider.metadata_prefix + 'uploaded-by',
-                'value': c.userobj.name
+                'value': c.userobj.id
                 }]
         conditions = [ '{"%s": "%s"}' % (x['name'], x['value']) for x in
                 fields ]
@@ -353,22 +357,30 @@ class StorageAPIController(BaseController):
             )
         # HACK: fix up some broken stuff from boto
         # e.g. should not have content-length-range in list of fields!
+        storage_backend = config['ofs.impl']
         for idx,field in enumerate(data['fields']):
+            if storage_backend == 'google':
+                if field['name'] == 'AWSAccessKeyId':
+                    field['name'] = 'GoogleAccessId'
             if field['name'] == 'content-length-range':
                 del data['fields'][idx]
         return data
 
     def _get_form_data(self, label):
-        data = {
-            'action': h.url_for('storage_upload_handle', qualified=True),
-            'fields': [
-                {
-                    'name': 'key',
-                    'value': label
-                }
-            ]
-        }
-        return data
+        storage_backend = config['ofs.impl']
+        if storage_backend in ['google', 's3']:
+            return self._get_remote_form_data(label)
+        else:
+            data = {
+                'action': h.url_for('storage_upload_handle', qualified=False),
+                'fields': [
+                    {
+                        'name': 'key',
+                        'value': label
+                    }
+                ]
+            }
+            return data
 
     @jsonpify
     def auth_form(self, label):

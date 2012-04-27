@@ -1,54 +1,78 @@
+import logging
 import genshi
 import datetime
+from urllib import urlencode
 
-from sqlalchemy.orm import eagerload_all
-from ckan.lib.base import BaseController, c, model, request, render, h
+from ckan.lib.base import BaseController, c, model, request, render, h, g
 from ckan.lib.base import ValidationException, abort, gettext
 from pylons.i18n import get_lang, _
-import ckan.authz as authz
-from ckan.authz import Authorizer
 from ckan.lib.helpers import Page
-from ckan.plugins import PluginImplementations, IGroupController
 from ckan.lib.navl.dictization_functions import DataError, unflatten, validate
 from ckan.logic import NotFound, NotAuthorized, ValidationError
 from ckan.logic import check_access, get_action
-from ckan.logic.schema import group_form_schema
 from ckan.logic import tuplize_dict, clean_dict, parse_params
 import ckan.forms
+import ckan.logic.action.get
+
+from ckan.lib.plugins import lookup_group_plugin
+
+log = logging.getLogger(__name__)
 
 class GroupController(BaseController):
 
-    ## hooks for subclasses 
-    group_form = 'group/new_group_form.html'
+    ## hooks for subclasses
 
-    def _form_to_db_schema(self):
-        return group_form_schema()
+    def _group_form(self, group_type=None):
+        return lookup_group_plugin(group_type).group_form()
 
-    def _db_to_form_schema(self):
+    def _form_to_db_schema(self, group_type=None):
+        return lookup_group_plugin(group_type).form_to_db_schema()
+
+    def _db_to_form_schema(self, group_type=None):
         '''This is an interface to manipulate data from the database
         into a format suitable for the form (optional)'''
+        return lookup_group_plugin(group_type).form_to_db_schema()
 
-    def _setup_template_variables(self, context):
-        c.is_sysadmin = Authorizer().is_sysadmin(c.user)
+    def _setup_template_variables(self, context, data_dict, group_type=None):
+        return lookup_group_plugin(group_type).setup_template_variables(context,data_dict)
 
-        ## This is messy as auths take domain object not data_dict
-        context_group = context.get('group',None)
-        group = context_group or c.group
-        if group:
-            try:
-                if not context_group:
-                    context['group'] = group
-                check_access('group_change_state',context)
-                c.auth_for_change_state = True
-            except NotAuthorized:
-                c.auth_for_change_state = False
+    def _new_template(self,group_type):
+        return lookup_group_plugin(group_type).new_template()
+
+    def _index_template(self,group_type):
+        return lookup_group_plugin(group_type).index_template()
+
+    def _read_template(self, group_type):
+        return lookup_group_plugin(group_type).read_template()
+
+    def _history_template(self, group_type):
+        return lookup_group_plugin(group_type).history_template()
 
     ## end hooks
-    
+
+    def _guess_group_type(self, expecting_name=False):
+        """
+            Guess the type of group from the URL handling the case
+            where there is a prefix on the URL (such as /data/organization)
+        """
+        parts = [x for x in request.path.split('/') if x]
+
+        idx = -1
+        if expecting_name:
+            idx = -2
+
+        gt = parts[idx]
+        if gt == 'group':
+            gt = None
+
+        return gt
+
+
     def index(self):
+        group_type = self._guess_group_type()
 
         context = {'model': model, 'session': model.Session,
-                   'user': c.user or c.author}
+                   'user': c.user or c.author, 'for_view': True}
 
         data_dict = {'all_fields': True}
 
@@ -56,7 +80,7 @@ class GroupController(BaseController):
             check_access('site_read', context)
         except NotAuthorized:
             abort(401, _('Not authorized to see this page'))
-        
+
         results = get_action('group_list')(context, data_dict)
 
         c.page = Page(
@@ -65,14 +89,19 @@ class GroupController(BaseController):
             url=h.pager_url,
             items_per_page=20
         )
-        return render('group/index.html')
+        return render( self._index_template(group_type) )
 
 
     def read(self, id):
+        from ckan.lib.search import SearchError
+        group_type = self._get_group_type(id.split('@')[0])
         context = {'model': model, 'session': model.Session,
                    'user': c.user or c.author,
-                   'schema': self._form_to_db_schema()}
+                   'schema': self._form_to_db_schema(group_type=group_type),
+                   'for_view': True}
         data_dict = {'id': id}
+        q = c.q = request.params.get('q', '') # unicode format (decoded from utf8)
+
         try:
             c.group_dict = get_action('group_show')(context, data_dict)
             c.group = context['group']
@@ -80,59 +109,140 @@ class GroupController(BaseController):
             abort(404, _('Group not found'))
         except NotAuthorized:
             abort(401, _('Unauthorized to read group %s') % id)
+
+        # Search within group
+        q += ' groups: "%s"' % c.group_dict.get('name')
+
         try:
-            description_formatted = ckan.misc.MarkdownFormat().to_html(c.group.get('description',''))
+            description_formatted = ckan.misc.MarkdownFormat().to_html(c.group_dict.get('description',''))
             c.description_formatted = genshi.HTML(description_formatted)
         except Exception, e:
             error_msg = "<span class='inline-warning'>%s</span>" % _("Cannot render description")
             c.description_formatted = genshi.HTML(error_msg)
-        
-        try:
-            desc_formatted = ckan.misc.MarkdownFormat().to_html(c.group.description)
-            desc_formatted = genshi.HTML(desc_formatted)
-        except genshi.ParseError, e:
-            desc_formatted = 'Error: Could not parse group description'
-        c.group_description_formatted = desc_formatted
+
         c.group_admins = self.authorizer.get_admins(c.group)
 
-        results = get_action('group_package_show')(context, data_dict)
+        context['return_query'] = True
 
-        c.page = Page(
-            collection=results,
-            page=request.params.get('page', 1),
-            url=h.pager_url,
-            items_per_page=50
-        )
+        limit = 20
+        try:
+            page = int(request.params.get('page', 1))
+        except ValueError, e:
+            abort(400, ('"page" parameter must be an integer'))
 
-        return render('group/read.html')
+        # most search operations should reset the page counter:
+        params_nopage = [(k, v) for k,v in request.params.items() if k != 'page']
+
+        def search_url(params):
+            url = h.url_for(controller='group', action='read', id=c.group_dict.get('name'))
+            params = [(k, v.encode('utf-8') if isinstance(v, basestring) else str(v)) \
+                            for k, v in params]
+            return url + u'?' + urlencode(params)
+
+        def drill_down_url(**by):
+            params = list(params_nopage)
+            params.extend(by.items())
+            return search_url(set(params))
+
+        c.drill_down_url = drill_down_url
+
+        def remove_field(key, value):
+            params = list(params_nopage)
+            params.remove((key, value))
+            return search_url(params)
+
+        c.remove_field = remove_field
+
+        def pager_url(q=None, page=None):
+            params = list(params_nopage)
+            params.append(('page', page))
+            return search_url(params)
+
+        try:
+            c.fields = []
+            search_extras = {}
+            for (param, value) in request.params.items():
+                if not param in ['q', 'page'] \
+                        and len(value) and not param.startswith('_'):
+                    if not param.startswith('ext_'):
+                        c.fields.append((param, value))
+                        q += ' %s: "%s"' % (param, value)
+                    else:
+                        search_extras[param] = value
+
+
+            fq = 'capacity:"public"'
+            if (c.userobj and c.group and c.userobj.is_in_group(c.group)):
+                fq = ''
+
+            data_dict = {
+                'q':q,
+                'fq':fq,
+                'facet.field':g.facets,
+                'rows':limit,
+                'start':(page-1)*limit,
+                'extras':search_extras
+            }
+
+            query = get_action('package_search')(context,data_dict)
+
+            c.page = h.Page(
+                collection=query['results'],
+                page=page,
+                url=pager_url,
+                item_count=query['count'],
+                items_per_page=limit
+            )
+            c.facets = query['facets']
+            c.search_facets = query['search_facets']
+            c.page.items = query['results']
+        except SearchError, se:
+            log.error('Group search error: %r', se.args)
+            c.query_error = True
+            c.facets = {}
+            c.page = h.Page(collection=[])
+
+        # Add the group's activity stream (already rendered to HTML) to the
+        # template context for the group/read.html template to retrieve later.
+        c.group_activity_stream = \
+                ckan.logic.action.get.group_activity_list_html(context,
+                    {'id': c.group_dict['id']})
+
+        return render( self._read_template(c.group_dict['type']) )
 
     def new(self, data=None, errors=None, error_summary=None):
+        group_type = self._guess_group_type(True)
+        if data:
+            data['type'] = group_type
+
         context = {'model': model, 'session': model.Session,
                    'user': c.user or c.author, 'extras_as_string': True,
-                   'schema': self._form_to_db_schema(),
-                   'save': 'save' in request.params}
+                   'save': 'save' in request.params,
+                   'parent': request.params.get('parent', None)}
         try:
             check_access('group_create',context)
         except NotAuthorized:
             abort(401, _('Unauthorized to create a group'))
 
         if context['save'] and not data:
-            return self._save_new(context)
-        
+            return self._save_new(context, group_type)
+
         data = data or {}
         errors = errors or {}
         error_summary = error_summary or {}
         vars = {'data': data, 'errors': errors, 'error_summary': error_summary}
 
-        self._setup_template_variables(context)
-        c.form = render(self.group_form, extra_vars=vars)
-        return render('group/new.html')
+        self._setup_template_variables(context,data)
+        c.form = render(self._group_form(group_type=group_type), extra_vars=vars)
+        return render(self._new_template(group_type))
 
     def edit(self, id, data=None, errors=None, error_summary=None):
+        group_type = self._get_group_type(id.split('@')[0])
         context = {'model': model, 'session': model.Session,
                    'user': c.user or c.author, 'extras_as_string': True,
                    'save': 'save' in request.params,
-                   'schema': self._form_to_db_schema(),
+                   'for_edit': True,
+                   'parent': request.params.get('parent', None)
                    }
         data_dict = {'id': id}
 
@@ -143,10 +253,6 @@ class GroupController(BaseController):
             old_data = get_action('group_show')(context, data_dict)
             c.grouptitle = old_data.get('title')
             c.groupname = old_data.get('name')
-            schema = self._db_to_form_schema()
-            if schema and not data:
-                old_data, errors = validate(old_data, schema, context=context)
-
             data = data or old_data
         except NotFound:
             abort(404, _('Group not found'))
@@ -156,7 +262,6 @@ class GroupController(BaseController):
         group = context.get("group")
         c.group = group
 
-
         try:
             check_access('group_update',context)
         except NotAuthorized, e:
@@ -165,21 +270,36 @@ class GroupController(BaseController):
         errors = errors or {}
         vars = {'data': data, 'errors': errors, 'error_summary': error_summary}
 
-        self._setup_template_variables(context)
-        c.form = render(self.group_form, extra_vars=vars)
+        self._setup_template_variables(context, data, group_type=group_type)
+        c.form = render(self._group_form(group_type), extra_vars=vars)
         return render('group/edit.html')
 
-    def _save_new(self, context):
+    def _get_group_type(self, id):
+        """
+        Given the id of a group it determines the type of a group given
+        a valid id/name for the group.
+        """
+        group = model.Group.get( id )
+        if not group:
+            return None
+
+        return group.type
+
+    def _save_new(self, context, group_type=None):
         try:
             data_dict = clean_dict(unflatten(
                 tuplize_dict(parse_params(request.params))))
+            data_dict['type'] = group_type or 'group'
             context['message'] = data_dict.get('log_message', '')
+            data_dict['users'] = [{'name': c.user, 'capacity': 'admin'}]
             group = get_action('group_create')(context, data_dict)
-            h.redirect_to(controller='group', action='read', id=group['name'])
+
+            # Redirect to the appropriate _read route for the type of group
+            h.redirect_to( group['type'] + '_read', id=group['name'])
         except NotAuthorized:
             abort(401, _('Unauthorized to read group %s') % '')
         except NotFound, e:
-            abort(404, _('Package not found'))
+            abort(404, _('Group not found'))
         except DataError:
             abort(400, _(u'Integrity Error'))
         except ValidationError, e:
@@ -194,11 +314,11 @@ class GroupController(BaseController):
             context['message'] = data_dict.get('log_message', '')
             data_dict['id'] = id
             group = get_action('group_update')(context, data_dict)
-            h.redirect_to(controller='group', action='read', id=group['name'])
+            h.redirect_to('%s_read' % str(group['type']), id=group['name'])
         except NotAuthorized:
             abort(401, _('Unauthorized to read group %s') % id)
         except NotFound, e:
-            abort(404, _('Package not found'))
+            abort(404, _('Group not found'))
         except DataError:
             abort(400, _(u'Integrity Error'))
         except ValidationError, e:
@@ -223,21 +343,11 @@ class GroupController(BaseController):
         if not c.authz_editable:
             abort(401, gettext('User %r not authorized to edit %s authorizations') % (c.user, id))
 
-        current_uors = self._get_userobjectroles(id)
-        self._handle_update_of_authz(current_uors, group)
-
-        # get the roles again as may have changed
-        user_object_roles = self._get_userobjectroles(id)
-        self._prepare_authz_info_for_render(user_object_roles)
+        roles = self._handle_update_of_authz(group)
+        self._prepare_authz_info_for_render(roles)
         return render('group/authz.html')
 
 
-    def _get_userobjectroles(self, group_id):
-        group = model.Group.get(group_id)
-        uors = model.Session.query(model.GroupRole).join('group').filter_by(name=group.name).all()
-        return uors
-
-       
     def history(self, id):
         if 'diff' in request.params or 'selected1' in request.params:
             try:
@@ -306,7 +416,7 @@ class GroupController(BaseController):
                 )
             feed.content_type = 'application/atom+xml'
             return feed.writeString('utf-8')
-        return render('group/history.html')
+        return render( self._history_template(c.group_dict['type']) )
 
     def _render_edit_form(self, fs):
         # errors arrive in c.error and fs.errors

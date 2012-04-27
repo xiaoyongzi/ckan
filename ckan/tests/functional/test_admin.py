@@ -9,7 +9,7 @@ class TestAdminController(WsgiAppCase):
 
     @classmethod
     def teardown_class(self):
-        CreateTestData.delete()
+        model.repo.rebuild_db()
 
     #test that only sysadmins can access the /ckan-admin page
     def test_index(self):
@@ -34,7 +34,7 @@ class TestAdminAuthzController(WsgiAppCase):
         # Creating a couple of authorization groups, which are enough to break
         # some things just by their existence
         for ag_name in [u'anauthzgroup', u'anotherauthzgroup']:
-            ag=model.AuthorizationGroup.by_name(ag_name) 
+            ag=model.AuthorizationGroup.by_name(ag_name)
             if not ag: #may already exist, if not create
                 ag=model.AuthorizationGroup(name=ag_name)
                 model.Session.add(ag)
@@ -46,7 +46,7 @@ class TestAdminAuthzController(WsgiAppCase):
 
     @classmethod
     def teardown_class(self):
-        CreateTestData.delete()
+        model.repo.rebuild_db()
 
     def test_role_table(self):
 
@@ -98,7 +98,7 @@ class TestAdminAuthzController(WsgiAppCase):
 
         def authz_submit(form):
           return form.submit('authz_save', extra_environ=as_testsysadmin)
-            
+
         # get and store the starting state of the system roles
         original_user_roles = get_system_user_roles()
         original_authzgroup_roles = get_system_authzgroup_roles()
@@ -162,7 +162,7 @@ class TestAdminAuthzController(WsgiAppCase):
         check_and_set_checkbox(form, u'visitor', u'editor', False, True)
         check_and_set_checkbox(form, u'visitor', u'reader', False,  False)
         check_and_set_checkbox(form, u'logged_in', u'editor', True, False)
-        check_and_set_checkbox(form, u'logged_in', u'reader', False, True)      
+        check_and_set_checkbox(form, u'logged_in', u'reader', False, True)
         submit(form)
 
         roles=get_system_user_roles()
@@ -179,7 +179,7 @@ class TestAdminAuthzController(WsgiAppCase):
                 return [y for (x,y) in get_system_user_roles() if x==user]
             elif group:
                 return [y for (x,y) in get_system_authzgroup_roles() if x==group]
-            else: 
+            else:
                 assert False, 'miscalled'
 
 
@@ -215,7 +215,7 @@ class TestAdminAuthzController(WsgiAppCase):
                         if x.__class__.__name__ == 'Checkbox'][0]
         assert checkbox.checked == False
         checkbox.checked=True
-        
+
         response = form.submit('authz_add', extra_environ=as_testsysadmin)
         assert "Authorization Group Added" in response, "don't see flash message"
 
@@ -266,7 +266,7 @@ class TestAdminTrashController(WsgiAppCase):
         url = url_for('ckanadmin', action='trash')
         response = self.app.get(url, extra_environ=as_testsysadmin)
         assert 'dataset/warandpeace' in response, response
-        
+
         # Check we get correct error message on attempted purge
         form = response.forms['form-purge-packages']
         response = form.submit('purge-packages', status=[302],
@@ -334,7 +334,7 @@ class TestAdminTrashController(WsgiAppCase):
         url = url_for('ckanadmin', action='trash')
         res = self.app.get(url, extra_environ=as_testsysadmin)
         form = res.forms['undelete-'+rev.id]
-        res = form.submit('submit', status=[302], extra_environ=as_testsysadmin)
+        res = form.submit('action', status=[302], extra_environ=as_testsysadmin)
         res = res.follow(extra_environ=as_testsysadmin)
 
         assert 'Revision updated' in res

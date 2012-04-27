@@ -1,24 +1,25 @@
 import copy
 import formencode as fe
 import inspect
+from pylons.i18n import _
 
 class Missing(object):
     def __unicode__(self):
-        raise Invalid(fe.api._stdtrans('Missing value'))
+        raise Invalid(_('Missing value'))
     def __str__(self):
-        raise Invalid(fe.api._stdtrans('Missing value'))
+        raise Invalid(_('Missing value'))
     def __int__(self):
-        raise Invalid(fe.api._stdtrans('Missing value'))
+        raise Invalid(_('Missing value'))
     def __complex__(self):
-        raise Invalid(fe.api._stdtrans('Missing value'))
+        raise Invalid(_('Missing value'))
     def __long__(self):
-        raise Invalid(fe.api._stdtrans('Missing value'))
+        raise Invalid(_('Missing value'))
     def __float__(self):
-        raise Invalid(fe.api._stdtrans('Missing value'))
+        raise Invalid(_('Missing value'))
     def __oct__(self):
-        raise Invalid(fe.api._stdtrans('Missing value'))
+        raise Invalid(_('Missing value'))
     def __hex__(self):
-        raise Invalid(fe.api._stdtrans('Missing value'))
+        raise Invalid(_('Missing value'))
     def __nonzero__(self):
         return False
 
@@ -27,15 +28,21 @@ missing = Missing()
 class State(object):
     pass
 
-class Invalid(Exception):
+class DictizationError(Exception):
+    def __str__(self):
+        if hasattr(self, 'error') and self.error:
+            return repr(self.error)
+        return ''
+
+class Invalid(DictizationError):
     def __init__(self, error, key=None):
         self.error = error
 
-class DataError(Exception):
+class DataError(DictizationError):
     def __init__(self, error):
         self.error = error
 
-class StopOnError(Exception):
+class StopOnError(DictizationError):
     '''error to stop validations for a particualar key'''
     pass
 
@@ -60,9 +67,10 @@ def flatten_schema(schema, flattened=None, key=None):
     return flattened
 
 def get_all_key_combinations(data, flattented_schema):
-    '''compare the schema agaist the given data and get all valid tuples that
-    match the schema ignoring the last value in the tuple.'''
+    '''Compare the schema against the given data and get all valid tuples that
+    match the schema ignoring the last value in the tuple.
 
+    '''
     schema_prefixes = set([key[:-1] for key in flattented_schema])
     combinations = set([()])
 
@@ -102,7 +110,6 @@ def make_full_schema(data, schema):
 
 def augment_data(data, schema):
     '''add missing, extras and junk data'''
-
     flattented_schema = flatten_schema(schema)
     key_combinations = get_all_key_combinations(data, flattented_schema)
 
@@ -118,12 +125,12 @@ def augment_data(data, schema):
 
         ## check if any thing naugthy is placed against subschemas
         initial_tuple = key[::2]
-        if initial_tuple in [initial_key[:len(initial_tuple)] 
+        if initial_tuple in [initial_key[:len(initial_tuple)]
                              for initial_key in flattented_schema]:
             if data[key] <> []:
                 raise DataError('Only lists of dicts can be placed against '
-                                'subschema %s' % key)
-                
+                                'subschema %s, not %s' % (key,type(data[key])))
+
         if key[:-1] in key_combinations:
             extras_key = key[:-1] + ('__extras',)
             extras = new_data.get(extras_key, {})
@@ -206,8 +213,7 @@ def _remove_blank_keys(schema):
     return schema
 
 def validate(data, schema, context=None):
-    '''validate an unflattened nested dict agiast a schema'''
-
+    '''Validate an unflattened nested dict against a schema.'''
     context = context or {}
 
     assert isinstance(data, dict)
@@ -247,7 +253,6 @@ def validate_flattened(data, schema, context=None):
 
 def _validate(data, schema, context):
     '''validate a flattened dict against a schema'''
-    
     converted_data = augment_data(data, schema)
     full_schema = make_full_schema(data, schema)
 
@@ -357,24 +362,29 @@ def unflatten(data):
      'state': u'active',
      'save': u'Save Changes',
      'cancel': u'Cancel'}
-    
     '''
 
     unflattened = {}
+    convert_to_list = []
 
     for flattend_key in sorted(data.keys(), key=flattened_order_key):
         current_pos = unflattened
+
+        if (len(flattend_key) > 1
+            and not flattend_key[0] in convert_to_list
+            and not flattend_key[0] in unflattened):
+            convert_to_list.append(flattend_key[0])
+
         for key in flattend_key[:-1]:
             try:
                 current_pos = current_pos[key]
             except KeyError:
-                new_pos = []
+                new_pos = {}
                 current_pos[key] = new_pos
                 current_pos = new_pos
-            except IndexError:
-                new_pos = {}
-                current_pos.append(new_pos)
-                current_pos = new_pos
         current_pos[flattend_key[-1]] = data[flattend_key]
+
+    for key in convert_to_list:
+        unflattened[key] = [unflattened[key][s] for s in sorted(unflattened[key])]
 
     return unflattened

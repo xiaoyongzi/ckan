@@ -2,7 +2,9 @@ from __future__ import with_statement # necessary for python 2.5 support
 import warnings
 import logging
 
-from pylons import config
+with warnings.catch_warnings():
+    warnings.filterwarnings('ignore', '.*Unbuilt egg.*')
+    from pylons import config
 from sqlalchemy import MetaData, __version__ as sqav
 from sqlalchemy.schema import Index
 from paste.deploy.converters import asbool
@@ -14,15 +16,20 @@ from package import *
 from tag import *
 from package_mapping import *
 from user import user_table, User
-from authorization_group import * 
+from authorization_group import *
 from group import *
 from group_extra import *
 from authz import *
 from package_extra import *
 from resource import *
+from tracking import *
 from rating import *
 from package_relationship import *
 from task_status import *
+from vocabulary import *
+from activity import *
+from related import *
+from term_translation import *
 import ckan.migration
 from ckan.lib.helpers import OrderedDict, datetime_to_date_str
 from vdm.sqlalchemy.base import SQLAlchemySession
@@ -46,14 +53,14 @@ def init_model(engine):
     except sqlalchemy.exc.NoSuchTableError:
         pass
 
-    
+
 
 class Repository(vdm.sqlalchemy.Repository):
     migrate_repository = ckan.migration.__path__[0]
 
     # note: tables_created value is not sustained between instantiations so
     #       only useful for tests. The alternative is to use are_tables_created().
-    tables_created_and_initialised = False 
+    tables_created_and_initialised = False
 
     def init_db(self):
         '''Ensures tables, const data and some default config is created.
@@ -74,6 +81,17 @@ class Repository(vdm.sqlalchemy.Repository):
         else:
             if not self.tables_created_and_initialised:
                 self.upgrade_db()
+                ## make sure celery tables are made as celery only makes them after
+                ## adding a task
+                import ckan.lib.celery_app as celery_app
+                import celery.db.session as celery_session
+
+                ##This creates the database tables it is a slight hack to celery.
+                backend = celery_app.celery.backend
+                celery_result_session = backend.ResultSession()
+                engine = celery_result_session.bind
+                celery_session.ResultModelBase.metadata.create_all(engine)
+
                 self.init_configuration_data()
                 self.tables_created_and_initialised = True
 
@@ -107,14 +125,14 @@ class Repository(vdm.sqlalchemy.Repository):
             rev.author = 'system'
             rev.message = u'Initialising the Repository'
             Session.add(rev)
-        self.commit_and_remove()   
+        self.commit_and_remove()
 
     def create_db(self):
         '''Ensures tables, const data and some default config is created.
         i.e. the same as init_db APART from when running tests, when init_db
         has shortcuts.
         '''
-        self.metadata.create_all(bind=self.metadata.bind)    
+        self.metadata.create_all(bind=self.metadata.bind)
         self.init_const_data()
         self.init_configuration_data()
 
@@ -138,7 +156,7 @@ class Repository(vdm.sqlalchemy.Repository):
         self.session.remove()
         self.init_db()
         self.session.flush()
-        
+
     def delete_all(self):
         '''Delete all data from all tables.'''
         self.session.remove()
@@ -175,7 +193,7 @@ class Repository(vdm.sqlalchemy.Repository):
         self.setup_migration_version_control()
         mig.upgrade(self.metadata.bind, self.migrate_repository, version=version)
         self.init_const_data()
-        
+
         ##this prints the diffs in a readable format
         ##import pprint
         ##from migrate.versioning.schemadiff import getDiffOfModelAgainstDatabase
@@ -183,7 +201,9 @@ class Repository(vdm.sqlalchemy.Repository):
 
     def are_tables_created(self):
         metadata = MetaData(self.metadata.bind)
-        metadata.reflect()
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', '.*(reflection|geometry).*')
+            metadata.reflect()
         return bool(metadata.tables)
 
     def purge_revision(self, revision, leave_record=False):
@@ -284,26 +304,6 @@ Revision.packages = property(_get_packages)
 Revision.groups = property(_get_groups)
 Revision.user = property(_get_revision_user)
 
-def strptimestamp(s):
-    '''Convert a string of an ISO date into a datetime.datetime object.
-    
-    raises TypeError if the number of numbers in the string is not between 3
-                     and 7 (see datetime constructor).
-    raises ValueError if any of the numbers are out of range.
-    '''
-    # TODO: METHOD DEPRECATED - use ckan.lib.helpers.date_str_to_datetime
-    log.warn('model.strptimestamp is deprecated - use ckan.lib.helpers.date_str_to_datetime instead')
-    import datetime, re
-    return datetime.datetime(*map(int, re.split('[^\d]', s)))
-
-def strftimestamp(t):
-    '''Takes a datetime.datetime and returns it as an ISO string. For
-    a pretty printed string, use ckan.lib.helpers.render_datetime.
-    '''
-    # TODO: METHOD DEPRECATED - use ckan.lib.helpers.datetime_to_date_str
-    log.warn('model.strftimestamp is deprecated - use ckan.lib.helpers.datetime_to_date_str instead')
-    return t.isoformat()
-
 def revision_as_dict(revision, include_packages=True, include_groups=True,ref_package_by='name'):
     revision_dict = OrderedDict((
         ('id', revision.id),
@@ -320,7 +320,7 @@ def revision_as_dict(revision, include_packages=True, include_groups=True,ref_pa
     if include_groups:
         revision_dict['groups'] = [getattr(grp, ref_package_by) \
                                      for grp in revision.groups if grp]
-       
+
     return revision_dict
 
 def is_id(id_string):

@@ -1,11 +1,14 @@
 import datetime
 from time import gmtime
 from calendar import timegm
+from operator import attrgetter
+import logging
+logger = logging.getLogger(__name__)
 
-from sqlalchemy.sql import select, and_, union, expression, or_
+from sqlalchemy.sql import select, and_, union, expression, or_, desc
 from sqlalchemy.orm import eagerload_all
 from sqlalchemy import types, Column, Table
-from pylons import config
+from pylons import config, session, c, request
 from meta import metadata, Session
 import vdm.sqlalchemy
 
@@ -14,6 +17,7 @@ from core import make_revisioned_table, Revision, State
 from license import License, LicenseRegister
 from domain_object import DomainObject
 import ckan.misc
+from activity import Activity, ActivityDetail
 
 __all__ = ['Package', 'package_table', 'package_revision_table',
            'PACKAGE_NAME_MAX_LENGTH', 'PACKAGE_NAME_MIN_LENGTH',
@@ -34,10 +38,11 @@ package_table = Table('package', metadata,
         Column('author', types.UnicodeText),
         Column('author_email', types.UnicodeText),
         Column('maintainer', types.UnicodeText),
-        Column('maintainer_email', types.UnicodeText),                      
+        Column('maintainer_email', types.UnicodeText),
         Column('notes', types.UnicodeText),
         Column('license_id', types.UnicodeText),
-        Column('language', types.UnicodeText, default=u'en'),        
+        Column('language', types.UnicodeText, default=u'en'),
+        Column('type', types.UnicodeText),
 )
 
 
@@ -47,11 +52,10 @@ package_revision_table = make_revisioned_table(package_table)
 ## -------------------
 ## Mapped classes
 
-
 class Package(vdm.sqlalchemy.RevisionedObjectMixin,
         vdm.sqlalchemy.StatefulObjectMixin,
         DomainObject):
-    
+
     text_search_fields = ['name', 'title']
 
     def __init__(self, **kw):
@@ -73,7 +77,7 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
         query = query.options(eagerload_all('resource_groups_all.resources_all'))
         pkg = query.first()
         if pkg == None:
-            pkg = cls.by_name(reference)            
+            pkg = cls.by_name(reference)
         return pkg
     # Todo: Make sure package names can't be changed to look like package IDs?
 
@@ -84,7 +88,7 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
 
         assert len(self.resource_groups_all) == 1, "can only use resources on packages if there is only one resource_group"
         return self.resource_groups_all[0].resources
-    
+
     def update_resources(self, res_dicts, autoflush=True):
         '''Change this package\'s resources.
         @param res_dicts - ordered list of dicts, each detailing a resource
@@ -111,6 +115,7 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
             else:
                 resource = resource_obj_or_dict
             res_dict = resource.as_dict(core_columns_only=True)
+            del res_dict['created']
             return res_dict
         existing_res_identites = [get_resource_identity(res) \
                                   for res in self.resources]
@@ -128,7 +133,7 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
                 except ValueError:
                     continue
                 index_to_res[i] = self.resources[matching_res_index]
-                
+
         # Edit resources and create the new ones
         new_res_list = []
 
@@ -159,20 +164,77 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
             hash=hash,
             **kw))
 
-    def add_tag_by_name(self, tagname, autoflush=True):
-        from tag import Tag
-        if not tagname:
+    def add_tag(self, tag):
+        import ckan.model as model
+        if tag in self.get_tags(tag.vocabulary):
             return
-        tag = Tag.by_name(tagname, autoflush=autoflush)
-        if not tag:
-            tag = Tag(name=tagname)
-        if not tag in self.tags:
-            self.tags.append(tag)
+        else:
+            package_tag = model.PackageTag(self, tag)
+            model.Session.add(package_tag)
 
-    @property
-    def tags_ordered(self):
-        ourcmp = lambda tag1, tag2: cmp(tag1.name, tag2.name)
-        return sorted(self.tags, cmp=ourcmp)
+
+    def add_tags(self, tags):
+        for tag in tags:
+            self.add_tag(tag)
+
+    def add_tag_by_name(self, tag_name, vocab=None, autoflush=True):
+        """Add a tag with the given name to this package's tags.
+
+        By default the given tag_name will be searched for among the free tags
+        (tags which do not belong to any vocabulary) only. If the optional
+        argument `vocab` is given then the named vocab will be searched for the
+        tag name instead.
+
+        If no tag with the given name is found, one will be created. If the
+        optional argument vocab is given and there is no tag with the given
+        name in the given vocabulary, then a new tag will be created and added
+        to the vocabulary.
+
+        """
+        from tag import Tag
+        if not tag_name:
+            return
+        # Get the named tag.
+        tag = Tag.by_name(tag_name, vocab=vocab, autoflush=autoflush)
+        if not tag:
+            # Tag doesn't exist yet, make a new one.
+            if vocab:
+                tag = Tag(name=tag_name, vocabulary_id=vocab.id)
+            else:
+                tag = Tag(name=tag_name)
+        assert tag is not None
+        self.add_tag(tag)
+
+    def get_tags(self, vocab=None):
+        """Return a sorted list of this package's tags
+
+        Tags are sorted by their names.
+
+        """
+        import ckan.model as model
+        query = model.Session.query(model.Tag)
+        query = query.join(model.PackageTagRevision)
+        query = query.filter(model.PackageTagRevision.tag_id == model.Tag.id)
+        query = query.filter(model.PackageTagRevision.package_id == self.id)
+        query = query.filter(and_(
+            model.PackageTagRevision.state == 'active',
+            model.PackageTagRevision.current == True))
+        if vocab:
+            query = query.filter(model.Tag.vocabulary_id == vocab.id)
+        else:
+            query = query.filter(model.Tag.vocabulary_id == None)
+        query = query.order_by(model.Tag.name)
+        tags = query.all()
+        return tags
+
+    def remove_tag(self, tag):
+        import ckan.model as model
+        query = model.Session.query(model.PackageTag)
+        query = query.filter(model.PackageTag.package_id == self.id)
+        query = query.filter(model.PackageTag.tag_id == tag.id)
+        package_tag = query.one()
+        package_tag.delete()
+        model.Session.commit()
 
     def isopen(self):
         if self.license and self.license.isopen():
@@ -194,7 +256,7 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
         # Todo: Remove from Version 2?
         _dict['license'] = self.license.title if self.license else _dict.get('license_id', '')
         _dict['isopen'] = self.isopen()
-        tags = [tag.name for tag in self.tags]
+        tags = [tag.name for tag in self.get_tags()]
         tags.sort() # so it is determinable
         _dict['tags'] = tags
         groups = [getattr(group, ref_group_by) for group in self.get_groups()]
@@ -214,11 +276,18 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
         _dict['metadata_created'] = self.metadata_created.isoformat() \
             if self.metadata_created else None
         _dict['notes_rendered'] = ckan.misc.MarkdownFormat().to_html(self.notes)
+        #tracking
+        import ckan.model as model
+        tracking = model.TrackingSummary.get_for_package(self.id)
+        _dict['tracking_summary'] = tracking
         return _dict
 
     def add_relationship(self, type_, related_package, comment=u''):
         '''Creates a new relationship between this package and a
-        related_package. It leaves the caller to commit the change.'''
+        related_package. It leaves the caller to commit the change.
+
+        Raises KeyError if the type_ is invalid.
+        '''
         import package_relationship
         from ckan import model
         if type_ in package_relationship.PackageRelationship.get_forward_types():
@@ -317,15 +386,15 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
                     continue
                 # and check children
                 child_pkg = parent_rel_as_object.subject
-                if (child_pkg != self and 
+                if (child_pkg != self and
                     parent_rel_as_object.type == rel_as_subject.type and
                     child_pkg.state == State.ACTIVE):
                     type_printable = PackageRelationship.inferred_types_printable['sibling']
                     rel_list.append((child_pkg, type_printable, None))
         return sorted(list(set(rel_list)))
     #
-    ## Licenses are currently integrated into the domain model here.   
- 
+    ## Licenses are currently integrated into the domain model here.
+
     @classmethod
     def get_license_register(cls):
         if not hasattr(cls, '_license_register'):
@@ -399,7 +468,7 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
         '''Returns the latest revision for the package and its related
         objects.'''
         return self.all_related_revisions[0][0]
-        
+
     def diff(self, to_revision=None, from_revision=None):
         '''Overrides the diff in vdm, so that related obj revisions are
         diffed as well as PackageRevisions'''
@@ -412,7 +481,7 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
         # Iterate over PackageTag, PackageExtra, Resources etc.
         for obj_class in [ResourceGroup, Resource, PackageExtra, PackageTag]:
             obj_rev_class = obj_class.__revision_class__
-            # Query for object revisions related to this package            
+            # Query for object revisions related to this package
             if obj_class == Resource:
                 obj_rev_query = Session.query(obj_rev_class).\
                                 join('continuity', 'resource_group').\
@@ -464,8 +533,7 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
         Return most recent timestamp for revisions related to this package.
         NB Excludes changes to the package's groups
         """
-        import ckan.model as model
-
+        from ckan import model
         where = [model.package_table.c.id == self.id]
         where_clauses = [
             and_(model.package_table.c.revision_id == model.revision_table.c.id, *where),
@@ -489,7 +557,7 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
         # Use current connection because we might be in a 'before_commit' of
         # a SessionExtension - only by using the current connection can we get
         # at the newly created revision etc. objects.
-        conn = model.Session.connection() 
+        conn = model.Session.connection()
         result = conn.execute(query).fetchone()
 
         if result:
@@ -500,26 +568,45 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
             timestamp_float = timegm(timestamp_without_usecs) + usecs
             return datetime.datetime.utcfromtimestamp(timestamp_float)
 
-    def get_groups(self):
+    @property
+    def is_private(self):
+        """
+        A package is private if belongs to any private groups
+        """
+        return bool(self.get_groups(capacity='private'))
+
+    def is_in_group(self, group):
+        return group in self.get_groups()
+
+    def get_groups(self, group_type=None, capacity=None):
         import ckan.model as model
-        if '_groups' not in self.__dict__:
-            self._groups = model.Session.query(model.Group).\
-               join(model.Member, model.Member.group_id == model.Group.id).\
-               join(model.Package, model.Package.id == model.Member.table_id).\
-               filter(model.Member.state == 'active').\
-               filter(model.Package.id == self.id).all()
-        return self._groups
+
+        # Gets [ (group, capacity,) ...]
+        groups = model.Session.query(model.Group,model.Member.capacity).\
+           join(model.Member, model.Member.group_id == model.Group.id and \
+                model.Member.table_name == 'package' ).\
+           join(model.Package, model.Package.id == model.Member.table_id).\
+           filter(model.Member.state == 'active').\
+           filter(model.Member.table_id == self.id).all()
+
+        caps   = [g[1] for g in groups]
+        groups = [g[0] for g in groups ]
+        if group_type:
+            groups = [g for g in groups if g.type == group_type]
+        if capacity:
+            groupcaps = zip( groups,caps )
+            groups = [g[0] for g in groupcaps if g[1] == capacity]
+        return groups
 
     @property
     def metadata_created(self):
         import ckan.model as model
-        q = model.Session.query(model.PackageRevision)\
+        q = model.Session.query(model.PackageRevision.revision_timestamp)\
             .filter(model.PackageRevision.id == self.id)\
-            .order_by(model.PackageRevision.revision_timestamp.asc())\
-            .limit(1)
+            .order_by(model.PackageRevision.revision_timestamp.asc())
         ts = q.first()
-        if ts is not None:
-            return ts.revision_timestamp
+        if ts:
+            return ts[0]
 
     @staticmethod
     def get_fields(core_only=False, fields_to_ignore=None):
@@ -540,3 +627,52 @@ class Package(vdm.sqlalchemy.RevisionedObjectMixin,
 
         return fields
 
+    def activity_stream_item(self, activity_type, revision, user_id):
+        import ckan.model
+        import ckan.lib.dictization
+        import ckan.logic
+        assert activity_type in ("new", "changed"), (
+            str(activity_type))
+
+        # Handle 'deleted' objects.
+        # When the user marks a package as deleted this comes through here as
+        # a 'changed' package activity. We detect this and change it to a
+        # 'deleted' activity.
+        if activity_type == 'changed' and self.state == u'deleted':
+            if ckan.model.Session.query(ckan.model.Activity).filter_by(
+                    object_id=self.id, activity_type='deleted').all():
+                # A 'deleted' activity for this object has already been emitted
+                # FIXME: What if the object was deleted and then activated
+                # again?
+                return None
+            else:
+                # Emit a 'deleted' activity for this object.
+                activity_type = 'deleted'
+
+        try:
+            d = {'package': ckan.lib.dictization.table_dictize(self,
+                context={'model': ckan.model})}
+            return Activity(user_id, self.id, revision.id,
+                    "%s package" % activity_type, d)
+        except ckan.logic.NotFound:
+            # This happens if this package is being purged and therefore has no
+            # current revision.
+            # TODO: Purge all related activity stream items when a model object
+            # is purged.
+            return None
+
+    def activity_stream_detail(self, activity_id, activity_type):
+        import ckan.model
+        import ckan.lib.dictization
+
+        # Handle 'deleted' objects.
+        # When the user marks a package as deleted this comes through here as
+        # a 'changed' package activity. We detect this and change it to a
+        # 'deleted' activity.
+        if activity_type == 'changed' and self.state == u'deleted':
+            activity_type = 'deleted'
+
+        package_dict = ckan.lib.dictization.table_dictize(self,
+                context={'model':ckan.model})
+        return ActivityDetail(activity_id, self.id, u"Package", activity_type,
+            {'package': package_dict })

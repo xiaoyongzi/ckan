@@ -1,4 +1,5 @@
 import logging
+from pylons import session
 
 import genshi
 from urllib import quote
@@ -11,13 +12,11 @@ from ckan.lib.navl.dictization_functions import DataError, unflatten
 from ckan.logic import NotFound, NotAuthorized, ValidationError
 from ckan.logic import check_access, get_action
 from ckan.logic import tuplize_dict, clean_dict, parse_params
-from ckan.logic.schema import user_new_form_schema, user_edit_form_schema 
+from ckan.logic.schema import user_new_form_schema, user_edit_form_schema
+from ckan.logic.action.get import user_activity_list_html
 from ckan.lib.captcha import check_recaptcha, CaptchaError
 
 log = logging.getLogger(__name__)
-
-def login_form():
-    return render('user/login_form.html').replace('FORM_ACTION', '%s')
 
 class UserController(BaseController):
 
@@ -30,7 +29,7 @@ class UserController(BaseController):
             if c.action not in ('login','request_reset','perform_reset',):
                 abort(401, _('Not authorized to see this page'))
 
-    ## hooks for subclasses 
+    ## hooks for subclasses
     new_user_form = 'user/new_user_form.html'
     edit_user_form = 'user/edit_user_form.html'
 
@@ -83,13 +82,10 @@ class UserController(BaseController):
         return render('user/list.html')
 
     def read(self, id=None):
-
         context = {'model': model,
-                   'user': c.user or c.author}
-
+                'user': c.user or c.author, 'for_view': True}
         data_dict = {'id':id,
                      'user_obj':c.userobj}
-
         try:
             check_access('user_show',context, data_dict)
         except NotAuthorized:
@@ -103,14 +99,15 @@ class UserController(BaseController):
         c.user_dict = user_dict
         c.is_myself = user_dict['name'] == c.user
         c.about_formatted = self._format_about(user_dict['about'])
-
+        c.user_activity_stream = user_activity_list_html(context,
+            {'id':c.user_dict['id']})
         return render('user/read.html')
-    
-    def me(self):
+
+    def me(self, locale=None):
         if not c.user:
-            h.redirect_to(controller='user', action='login', id=None)
+            h.redirect_to(locale=locale, controller='user', action='login', id=None)
         user_ref = c.userobj.get_reference_preferred_for_uri()
-        h.redirect_to(controller='user', action='read', id=user_ref)
+        h.redirect_to(locale=locale, controller='user', action='read', id=user_ref)
 
     def register(self, data=None, errors=None, error_summary=None):
         return self.new(data, errors, error_summary)
@@ -131,7 +128,11 @@ class UserController(BaseController):
 
         if context['save'] and not data:
             return self._save_new(context)
-        
+
+        if c.user and not data:
+            # #1799 Don't offer the registration form if already logged in
+            return render('user/logout_first.html')
+
         data = data or {}
         errors = errors or {}
         error_summary = error_summary or {}
@@ -162,11 +163,16 @@ class UserController(BaseController):
             errors = e.error_dict
             error_summary = e.error_summary
             return self.new(data_dict, errors, error_summary)
-        # Redirect to a URL picked up by repoze.who which performs the login
-        h.redirect_to('/login_generic?login=%s&password=%s' % (
-            str(data_dict['name']),
-            quote(data_dict['password1'].encode('utf-8'))))
-
+        if not c.user:
+            # Redirect to a URL picked up by repoze.who which performs the login
+            h.redirect_to('/login_generic?login=%s&password=%s' % (
+                str(data_dict['name']),
+                quote(data_dict['password1'].encode('utf-8'))))
+        else:
+            # #1799 User has managed to register whilst logged in - warn user
+            # they are not re-logged in as new user.
+            h.flash_success(_('User "%s" is now registered but you are still logged in as "%s" from before') % (data_dict['name'], c.user))
+            return render('user/logout_first.html')
 
     def edit(self, id=None, data=None, errors=None, error_summary=None):
         context = {'model': model, 'session': model.Session,
@@ -202,10 +208,10 @@ class UserController(BaseController):
             abort(404, _('User not found'))
 
         user_obj = context.get('user_obj')
-        
+
         if not (ckan.authz.Authorizer().is_sysadmin(unicode(c.user)) or c.user == user_obj.name):
             abort(401, _('User %s not authorized to edit %s') % (str(c.user), id))
-        
+
         errors = errors or {}
         vars = {'data': data, 'errors': errors, 'error_summary': error_summary}
 
@@ -238,11 +244,27 @@ class UserController(BaseController):
 
 
     def login(self):
+        lang = session.pop('lang', None)
+        if lang:
+            session.save()
+            return h.redirect_to(locale=str(lang), controller='user', action='login')
         if 'error' in request.params:
             h.flash_error(request.params['error'])
-        return render('user/login.html')
-    
+
+        if request.environ['SCRIPT_NAME'] and g.openid_enabled:
+            # #1662 restriction
+            log.warn('Cannot mount CKAN at a URL and login with OpenID.')
+            g.openid_enabled = False
+
+        if not c.user:
+            return render('user/login.html')
+        else:
+            return render('user/logout_first.html')
+
     def logged_in(self):
+        # we need to set the language via a redirect
+        lang = session.pop('lang', None)
+        session.save()
         if c.user:
             context = {'model': model,
                        'user': c.user}
@@ -251,25 +273,37 @@ class UserController(BaseController):
 
             user_dict = get_action('user_show')(context,data_dict)
 
-            # Max age of cookies: 50 years. Matches time set in templates/user/login.html
-            cookie_timeout=50*365*24*60*60
-
-            response.set_cookie("ckan_user", user_dict['name'], max_age=cookie_timeout)
-            response.set_cookie("ckan_display_name", user_dict['display_name'], max_age=cookie_timeout)
-            response.set_cookie("ckan_apikey", user_dict['apikey'], max_age=cookie_timeout)
             h.flash_success(_("%s is now logged in") % user_dict['display_name'])
-            return self.me()
+            return self.me(locale=lang)
         else:
-            h.flash_error(_('Login failed. Bad username or password.'))
-            h.redirect_to(controller='user', action='login')
-          
+            err = _('Login failed. Bad username or password.')
+            if g.openid_enabled:
+                err += _(' (Or if using OpenID, it hasn\'t been associated with a user account.)')
+            h.flash_error(err)
+            h.redirect_to(locale=lang, controller='user', action='login')
+
+    def logout(self):
+        # save our language in the session so we don't loose it
+        session['lang'] = request.environ.get('CKAN_LANG')
+        session.save()
+        h.redirect_to('/user/logout')
+
+    def set_lang(self, lang):
+        # this allows us to set the lang in session.  Used for logging
+        # in/out to prevent being lost when repoze.who redirects things
+        session['lang'] = str(lang)
+        session.save()
+
     def logged_out(self):
+        # we need to get our language info back and the show the correct page
+        lang = session.get('lang')
         c.user = None
-        response.delete_cookie("ckan_user")
-        response.delete_cookie("ckan_display_name")
-        response.delete_cookie("ckan_apikey")
+        session.delete()
+        h.redirect_to(locale=lang, controller='user', action='logged_out_page')
+
+    def logged_out_page(self):
         return render('user/logout.html')
-    
+
     def request_reset(self):
         if request.method == 'POST':
             id = request.params.get('user')
@@ -307,7 +341,7 @@ class UserController(BaseController):
                 try:
                     mailer.send_reset_link(user_obj)
                     h.flash_success(_('Please check your inbox for a reset code.'))
-                    redirect('/')
+                    h.redirect_to('/')
                 except mailer.MailerException, e:
                     h.flash_error(_('Could not send reset link: %s') % unicode(e))
         return render('user/request_reset.html')
@@ -331,14 +365,14 @@ class UserController(BaseController):
 
         if request.method == 'POST':
             try:
-                context['reset_password'] = True 
+                context['reset_password'] = True
                 new_password = self._get_form_password()
                 user_dict['password'] = new_password
                 user_dict['reset_key'] = c.reset_key
                 user = get_action('user_update')(context, user_dict)
 
                 h.flash_success(_("Your password has been reset."))
-                redirect('/')
+                h.redirect_to('/')
             except NotAuthorized:
                 h.flash_error(_('Unauthorized to edit user %s') % id)
             except NotFound, e:
@@ -349,6 +383,8 @@ class UserController(BaseController):
                 h.flash_error(u'%r'% e.error_dict)
             except ValueError, ve:
                 h.flash_error(unicode(ve))
+
+        c.user_dict = user_dict
         return render('user/perform_reset.html')
 
     def _format_about(self, about):
@@ -359,7 +395,7 @@ class UserController(BaseController):
             log.error('Could not print "about" field Field: %r Error: %r', about, e)
             html = _('Error: Could not parse About text')
         return html
-    
+
     def _get_form_password(self):
         password1 = request.params.getone('password1')
         password2 = request.params.getone('password2')
@@ -369,4 +405,4 @@ class UserController(BaseController):
             elif not password1 == password2:
                 raise ValueError(_("The passwords you entered do not match."))
             return password1
-        
+

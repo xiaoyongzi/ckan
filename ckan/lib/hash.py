@@ -3,10 +3,15 @@ import hashlib
 
 from pylons import config, request
 
-secret = config['beaker.session.secret']
+secret = None
 
 def get_message_hash(value):
-    return hmac.new(secret, value, hashlib.sha1).hexdigest()
+    global secret
+    if not secret:
+        # avoid getting config value at module scope since config may
+        # not be read in yet
+        secret = config['beaker.session.secret']
+    return hmac.new(secret, value.encode('utf8'), hashlib.sha1).hexdigest()
 
 def get_redirect():
     '''Checks the return_to value against the hash, and if it

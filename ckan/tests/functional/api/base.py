@@ -81,7 +81,7 @@ class ApiTestCase(object):
         assert self.api_version != None, "API version is missing."
         base = '/api'
         if self.api_version:
-            base += '/' + self.api_version
+            base += '/%s' % self.api_version
         utf8_encoded = (u'%s%s' % (base, path)).encode('utf8')
         url_encoded = urllib.quote(utf8_encoded)
         return url_encoded
@@ -245,30 +245,6 @@ class Api1and2TestCase(object):
             package_ref = self.package_ref_from_name(package_name)
             return self.offset('/rest/rating/%s' % package_ref)
 
-    def relationship_offset(self, package_1_name=None,
-                            relationship_type=None,
-                            package_2_name=None,
-                            ):
-        assert package_1_name
-        package_1_ref = self.package_ref_from_name(package_1_name)
-        if package_2_name is None:
-            if not relationship_type:
-                return self.offset('/rest/dataset/%s/relationships' % \
-                                   package_1_ref)
-            else:
-                return self.offset('/rest/dataset/%s/%s' %
-                                   (package_1_ref, relationship_type))
-        else:
-            package_2_ref = self.package_ref_from_name(package_2_name)
-            if not relationship_type:
-                return self.offset('/rest/dataset/%s/relationships/%s' % \
-                                   (package_1_ref, package_2_ref))
-            else:
-                return self.offset('/rest/dataset/%s/%s/%s' % \
-                                   (package_1_ref,
-                                    relationship_type,
-                                    package_2_ref))
-
     def anna_offset(self, postfix=''):
         return self.package_offset('annakarenina') + postfix
 
@@ -302,17 +278,10 @@ class Api1and2TestCase(object):
         assert cls.ref_group_by in ['id', 'name']
         return getattr(group, cls.ref_group_by)
 
-    @classmethod
-    def _list_package_refs(cls, packages):
-        return [getattr(p, cls.ref_package_by) for p in packages]
-
-    @classmethod
-    def _list_group_refs(cls, groups):
-        return [getattr(p, cls.ref_group_by) for p in groups]
 
 class Api1TestCase(Api1and2TestCase):
 
-    api_version = '1'
+    api_version = 1
     ref_package_by = 'name'
     ref_group_by = 'name'
     ref_tag_by = 'name'
@@ -324,7 +293,7 @@ class Api1TestCase(Api1and2TestCase):
 
 class Api2TestCase(Api1and2TestCase):
 
-    api_version = '2'
+    api_version = 2
     ref_package_by = 'id'
     ref_group_by = 'id'
     ref_tag_by = 'id'
@@ -336,7 +305,7 @@ class Api2TestCase(Api1and2TestCase):
 
 class Api3TestCase(ApiTestCase):
 
-    api_version = '3'
+    api_version = 3
     ref_package_by = 'name'
     ref_group_by = 'name'
     ref_tag_by = 'name'
@@ -348,7 +317,7 @@ class Api3TestCase(ApiTestCase):
 class ApiUnversionedTestCase(Api1TestCase):
 
     api_version = ''
-    oldest_api_version = '1'
+    oldest_api_version = 1
 
     def get_expected_api_version(self):
         return self.oldest_api_version
@@ -448,9 +417,10 @@ class BaseModelApiTestCase(ApiTestCase, ControllerTestCase):
         if content_length is not None:
             environ['CONTENT_LENGTH'] = str(content_length)
         environ['REQUEST_METHOD'] = request_method
+        environ['QUERY_STRING'] = '' # avoids a warning
         environ['wsgi.input'] = StringIO(data)
         if extra_environ:
             environ.update(extra_environ)
         self.app._set_headers({}, environ)
         req = TestRequest(offset, environ, expect_errors=False)
-        return self.app.do_request(req, status=status)        
+        return self.app.do_request(req, status=status)

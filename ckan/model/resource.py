@@ -3,14 +3,16 @@ from sqlalchemy.ext.orderinglist import ordering_list
 from sqlalchemy import orm
 from pylons import config
 import vdm.sqlalchemy
+import datetime
 
 from meta import *
 from types import make_uuid, JsonDictType
 from core import *
 from package import *
 from ckan.model import extension
+from ckan.model.activity import ActivityDetail
 
-__all__ = ['Resource', 'resource_table', 
+__all__ = ['Resource', 'resource_table',
            'ResourceGroup', 'resource_group_table',
            'ResourceRevision', 'resource_revision_table',
            'ResourceGroupRevision', 'resource_group_revision_table',
@@ -18,9 +20,9 @@ __all__ = ['Resource', 'resource_table',
 
 CORE_RESOURCE_COLUMNS = ['url', 'format', 'description', 'hash', 'name',
                          'resource_type', 'mimetype', 'mimetype_inner',
-                         'size', 'last_modified', 'cache_url', 'cache_last_updated',
-                         'webstore_url', 'webstore_last_updated']
-
+                         'size', 'created', 'last_modified', 'cache_url',
+                         'cache_last_updated', 'webstore_url',
+                         'webstore_last_updated']
 
 
 ##formally package_resource
@@ -39,6 +41,7 @@ resource_table = Table(
     Column('mimetype', types.UnicodeText),
     Column('mimetype_inner', types.UnicodeText),
     Column('size', types.BigInteger),
+    Column('created', types.DateTime, default=datetime.datetime.now),
     Column('last_modified', types.DateTime),
     Column('cache_url', types.UnicodeText),
     Column('cache_last_updated', types.DateTime),
@@ -106,6 +109,9 @@ class Resource(vdm.sqlalchemy.RevisionedObjectMixin,
             _dict[k] = v
         if self.resource_group and not core_columns_only:
             _dict["package_id"] = self.resource_group.package_id
+        import ckan.model as model
+        tracking = model.TrackingSummary.get_for_resource(self.url)
+        _dict['tracking_summary'] = tracking
         return _dict
 
     @classmethod
@@ -139,6 +145,21 @@ class Resource(vdm.sqlalchemy.RevisionedObjectMixin,
     def related_packages(self):
         return [self.resource_group.package]
 
+    def activity_stream_detail(self, activity_id, activity_type):
+        import ckan.model as model
+        import ckan.lib.dictization
+
+        # Handle 'deleted' resources.
+        # When the user marks a resource as deleted this comes through here as
+        # a 'changed' resource activity. We detect this and change it to a
+        # 'deleted' activity.
+        if activity_type == 'changed' and self.state == u'deleted':
+            activity_type = 'deleted'
+
+        res_dict = ckan.lib.dictization.table_dictize(self,
+                context={'model':model})
+        return ActivityDetail(activity_id, self.id, u"Resource", activity_type,
+                {'resource': res_dict})
 
 class ResourceGroup(vdm.sqlalchemy.RevisionedObjectMixin,
                vdm.sqlalchemy.StatefulObjectMixin,

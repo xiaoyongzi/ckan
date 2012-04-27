@@ -1,42 +1,43 @@
 import logging
-import urlparse
 from urllib import urlencode
 import datetime
-import re
 
-from sqlalchemy.orm import eagerload_all
-import genshi
 from pylons import config
 from pylons.i18n import _
 from autoneg.accept import negotiate
-from babel.dates import format_date, format_datetime, format_time
 
 from ckan.logic import get_action, check_access
-from ckan.logic.schema import package_form_schema
 from ckan.lib.helpers import date_str_to_datetime
 from ckan.lib.base import request, c, BaseController, model, abort, h, g, render
 from ckan.lib.base import response, redirect, gettext
-from ckan.authz import Authorizer
-from ckan.lib.search import SearchIndexError, SearchError
 from ckan.lib.package_saver import PackageSaver, ValidationException
 from ckan.lib.navl.dictization_functions import DataError, unflatten, validate
 from ckan.lib.helpers import json
 from ckan.logic import NotFound, NotAuthorized, ValidationError
 from ckan.logic import tuplize_dict, clean_dict, parse_params, flatten_to_string_key
-from ckan.lib.dictization import table_dictize
 from ckan.lib.i18n import get_lang
 import ckan.forms
 import ckan.authz
 import ckan.rating
 import ckan.misc
+import ckan.logic.action.get
+from home import CACHE_PARAMETER
 
-log = logging.getLogger('ckan.controllers')
+from ckan.lib.plugins import lookup_package_plugin
+
+log = logging.getLogger(__name__)
+
+def _encode_params(params):
+    return [(k, v.encode('utf-8') if isinstance(v, basestring) else str(v)) \
+                                  for k, v in params]
+
+def url_with_params(url, params):
+    params = _encode_params(params)
+    return url + u'?' + urlencode(params)
 
 def search_url(params):
     url = h.url_for(controller='package', action='search')
-    params = [(k, v.encode('utf-8') if isinstance(v, basestring) else str(v)) \
-                    for k, v in params]
-    return url + u'?' + urlencode(params)
+    return url_with_params(url, params)
 
 autoneg_cfg = [
     ("application", "xhtml+xml", ["html"]),
@@ -49,60 +50,65 @@ autoneg_cfg = [
 
 class PackageController(BaseController):
 
-    ## hooks for subclasses 
-    package_form = 'package/new_package_form.html'
+    def _package_form(self, package_type=None):
+        return lookup_package_plugin(package_type).package_form()
 
-    def _form_to_db_schema(self):
-        return package_form_schema()
+    def _form_to_db_schema(self, package_type=None):
+        return lookup_package_plugin(package_type).form_to_db_schema()
 
-    def _db_to_form_schema(self):
+    def _db_to_form_schema(self, package_type=None):
         '''This is an interface to manipulate data from the database
         into a format suitable for the form (optional)'''
+        return lookup_package_plugin(package_type).db_to_form_schema()
 
-    def _check_data_dict(self, data_dict):
+    def _check_data_dict(self, data_dict, package_type=None):
         '''Check if the return data is correct, mostly for checking out if
         spammers are submitting only part of the form'''
+        return lookup_package_plugin(package_type).check_data_dict(data_dict)
 
-        # Resources might not exist yet (eg. Add Dataset)
-        surplus_keys_schema = ['__extras', '__junk', 'state', 'groups',
-                               'extras_validation', 'save', 'return_to',
-                               'resources']
+    def _setup_template_variables(self, context, data_dict, package_type=None):
+        return lookup_package_plugin(package_type).setup_template_variables(context, data_dict)
 
-        schema_keys = package_form_schema().keys()
-        keys_in_schema = set(schema_keys) - set(surplus_keys_schema)
+    def _new_template(self, package_type):
+        return lookup_package_plugin(package_type).new_template()
 
-        missing_keys = keys_in_schema - set(data_dict.keys())
+    def _comments_template(self, package_type):
+        return lookup_package_plugin(package_type).comments_template()
 
-        if missing_keys:
-            #print data_dict
-            #print missing_keys
-            log.info('incorrect form fields posted')
-            raise DataError(data_dict)
+    def _search_template(self, package_type):
+        return lookup_package_plugin(package_type).search_template()
 
-    def _setup_template_variables(self, context, data_dict):
-        c.groups_authz = get_action('group_list_authz')(context, data_dict)
-        data_dict.update({'available_only':True})
-        c.groups_available = get_action('group_list_authz')(context, data_dict)
-        c.licences = [('', '')] + model.Package.get_license_options()
-        c.is_sysadmin = Authorizer().is_sysadmin(c.user)
+    def _read_template(self, package_type):
+        return lookup_package_plugin(package_type).read_template()
 
-        ## This is messy as auths take domain object not data_dict
-        context_pkg = context.get('package',None)
-        pkg = context_pkg or c.pkg
-        if pkg:
-            try:
-                if not context_pkg:
-                    context['package'] = pkg
-                check_access('package_change_state',context)
-                c.auth_for_change_state = True
-            except NotAuthorized:
-                c.auth_for_change_state = False
+    def _history_template(self, package_type):
+        return lookup_package_plugin(package_type).history_template()
 
-    ## end hooks
+    def _guess_package_type(self, expecting_name=False):
+        """
+            Guess the type of package from the URL handling the case
+            where there is a prefix on the URL (such as /data/package)
+        """
+        parts = [x for x in request.path.split('/') if x]
+
+        idx = -1
+        if expecting_name:
+            idx = -2
+
+        pt = parts[idx]
+        if pt == 'package':
+            pt = 'dataset'
+
+        return pt
+
 
     authorizer = ckan.authz.Authorizer()
 
     def search(self):
+        from ckan.lib.search import SearchError
+
+        package_type = self._guess_package_type()
+
         try:
             context = {'model':model,'user': c.user or c.author}
             check_access('site_read',context)
@@ -115,46 +121,83 @@ class PackageController(BaseController):
             page = int(request.params.get('page', 1))
         except ValueError, e:
             abort(400, ('"page" parameter must be an integer'))
-        limit = 20
+        limit = g.datasets_per_page
 
         # most search operations should reset the page counter:
         params_nopage = [(k, v) for k,v in request.params.items() if k != 'page']
-        
-        def drill_down_url(**by):
-            params = list(params_nopage)
-            params.extend(by.items())
-            return search_url(set(params))
-        
-        c.drill_down_url = drill_down_url 
-        
+
+        def drill_down_url(alternative_url=None, **by):
+            params = set(params_nopage)
+            params |= set(by.items())
+            if alternative_url:
+                return url_with_params(alternative_url, params)
+            return search_url(params)
+
+        c.drill_down_url = drill_down_url
+
         def remove_field(key, value):
             params = list(params_nopage)
             params.remove((key, value))
             return search_url(params)
 
         c.remove_field = remove_field
-        
+
+        sort_by = request.params.get('sort', None)
+        params_nosort = [(k, v) for k,v in params_nopage if k != 'sort']
+        def _sort_by(fields):
+            """
+            Sort by the given list of fields.
+
+            Each entry in the list is a 2-tuple: (fieldname, sort_order)
+
+            eg - [('metadata_modified', 'desc'), ('name', 'asc')]
+
+            If fields is empty, then the default ordering is used.
+            """
+            params = params_nosort[:]
+
+            if fields:
+                sort_string = ', '.join( '%s %s' % f for f in fields )
+                params.append(('sort', sort_string))
+            return search_url(params)
+        c.sort_by = _sort_by
+        if sort_by is None:
+            c.sort_by_fields = []
+        else:
+            c.sort_by_fields = [ field.split()[0] for field in sort_by.split(',') ]
+
         def pager_url(q=None, page=None):
             params = list(params_nopage)
             params.append(('page', page))
             return search_url(params)
 
+        c.search_url_params = urlencode(_encode_params(params_nopage))
+
         try:
             c.fields = []
+            search_extras = {}
+            fq = ''
             for (param, value) in request.params.items():
-                if not param in ['q', 'page'] \
+                if param not in ['q', 'page', 'sort'] \
                         and len(value) and not param.startswith('_'):
-                    c.fields.append((param, value))
-                    q += ' %s: "%s"' % (param, value)
+                    if not param.startswith('ext_'):
+                        c.fields.append((param, value))
+                        fq += ' %s:"%s"' % (param, value)
+                    else:
+                        search_extras[param] = value
 
+            fq += ' capacity:"public"'
             context = {'model': model, 'session': model.Session,
-                       'user': c.user or c.author}
+                       'user': c.user or c.author, 'for_view': True}
 
             data_dict = {
                 'q':q,
+                'fq':fq,
                 'facet.field':g.facets,
                 'rows':limit,
                 'start':(page-1)*limit,
+                'sort': sort_by,
+                'extras':search_extras
             }
 
             query = get_action('package_search')(context,data_dict)
@@ -167,19 +210,61 @@ class PackageController(BaseController):
                 items_per_page=limit
             )
             c.facets = query['facets']
+            c.search_facets = query['search_facets']
             c.page.items = query['results']
         except SearchError, se:
+            log.error('Dataset search error: %r', se.args)
             c.query_error = True
             c.facets = {}
             c.page = h.Page(collection=[])
-        
-        return render('package/search.html')
+
+        return render( self._search_template(package_type) )
+
+    def _content_type_for_format(self, fmt):
+        """
+        Given a requested format this method determines the content-type
+        to set and the genshi template loader to use in order to render
+        it accurately.  TextTemplate must be used for non-xml templates
+        whilst all that are some sort of XML should use MarkupTemplate.
+        """
+        from genshi.template import MarkupTemplate
+        from genshi.template.text import NewTextTemplate
+
+        types = {
+            "html": ("text/html; charset=utf-8", MarkupTemplate, 'html'),
+            "rdf" : ("application/rdf+xml; charset=utf-8", MarkupTemplate, 'rdf'),
+            "n3" : ("text/n3; charset=utf-8", NewTextTemplate, 'n3'),
+            "application/rdf+xml" : ("application/rdf+xml; charset=utf-8", MarkupTemplate,'rdf'),
+            "text/n3": ("text/n3; charset=utf-8", NewTextTemplate, 'n3'),
+        }
+        # Check the accept header first
+        accept = request.headers.get('Accept', '')
+        if accept and accept in types:
+            return types[accept][0], types[accept][2], types[accept][1]
+
+        if fmt in types:
+            return types[fmt][0], types[fmt][2], types[fmt][1]
+        return None, "html", (types["html"][1])
 
 
-    def read(self, id):
+    def read(self, id, format='html'):
+        # Check we know the content type, if not then it is likely a revision
+        # and therefore we should merge the format onto the end of id
+        ctype,extension,loader = self._content_type_for_format(format)
+        if not ctype:
+            # Reconstitute the ID if we don't know what content type to use
+            ctype = "text/html; charset=utf-8"
+            id = "%s.%s" % (id, format)
+            format = 'html'
+        else:
+            format = extension
+
+        response.headers['Content-Type'] = ctype
+
+        package_type = self._get_package_type(id.split('@')[0])
         context = {'model': model, 'session': model.Session,
                    'user': c.user or c.author, 'extras_as_string': True,
-                   'schema': self._form_to_db_schema()}
+                   'for_view': True}
         data_dict = {'id': id}
 
         # interpret @<revision_id> or @<date> suffix
@@ -198,46 +283,47 @@ class PackageController(BaseController):
                     abort(400, _('Invalid revision format: %r') % e.args)
         elif len(split) > 2:
             abort(400, _('Invalid revision format: %r') % 'Too many "@" symbols')
-            
+
         #check if package exists
         try:
             c.pkg_dict = get_action('package_show')(context, data_dict)
             c.pkg = context['package']
-            c.pkg_json = json.dumps(c.pkg_dict)
+            c.resources_json = json.dumps(c.pkg_dict.get('resources',[]))
         except NotFound:
-            abort(404, _('Package not found'))
+            abort(404, _('Dataset not found'))
         except NotAuthorized:
             abort(401, _('Unauthorized to read package %s') % id)
-        
-        #set a cookie so we know whether to display the welcome message
-        c.hide_welcome_message = bool(request.cookies.get('hide_welcome_message', False))
-        response.set_cookie('hide_welcome_message', '1', max_age=3600) #(make cross-site?)
 
         # used by disqus plugin
         c.current_package_id = c.pkg.id
-        
-        if config.get('rdf_packages'):
-            accept_header = request.headers.get('Accept', '*/*')
-            for content_type, exts in negotiate(autoneg_cfg, accept_header):
-                if "html" not in exts: 
-                    rdf_url = '%s%s.%s' % (config['rdf_packages'], c.pkg.id, exts[0])
-                    redirect(rdf_url, code=303)
-                break
+        c.related_count = len(c.pkg.related)
+
+        # Add the package's activity stream (already rendered to HTML) to the
+        # template context for the package/read.html template to retrieve
+        # later.
+        c.package_activity_stream = \
+                ckan.logic.action.get.package_activity_list_html(context,
+                    {'id': c.current_package_id})
 
         PackageSaver().render_package(c.pkg_dict, context)
-        return render('package/read.html')
+
+        template = self._read_template( package_type )
+        template = template[:template.index('.')+1] + format
+
+        return render( template, loader_class=loader)
+
 
     def comments(self, id):
+        package_type = self._get_package_type(id)
         context = {'model': model, 'session': model.Session,
-                   'user': c.user or c.author, 'extras_as_string': True,
-                   'schema': self._form_to_db_schema()}
+                   'user': c.user or c.author, 'extras_as_string': True,}
 
         #check if package exists
         try:
             c.pkg_dict = get_action('package_show')(context, {'id':id})
             c.pkg = context['package']
         except NotFound:
-            abort(404, _('Package not found'))
+            abort(404, _('Dataset not found'))
         except NotAuthorized:
             abort(401, _('Unauthorized to read package %s') % id)
 
@@ -246,10 +332,12 @@ class PackageController(BaseController):
 
         #render the package
         PackageSaver().render_package(c.pkg_dict)
-        return render('package/comments.html')
+        return render(  self._comments_template( package_type ) )
 
 
     def history(self, id):
+        package_type = self._get_package_type(id.split('@')[0])
+
         if 'diff' in request.params or 'selected1' in request.params:
             try:
                 params = {'id':request.params.getone('pkg_name'),
@@ -278,16 +366,16 @@ class PackageController(BaseController):
         except NotAuthorized:
             abort(401, _('Unauthorized to read package %s') % '')
         except NotFound:
-            abort(404, _('Package not found'))
+            abort(404, _('Dataset not found'))
 
         format = request.params.get('format', '')
         if format == 'atom':
             # Generate and return Atom 1.0 document.
             from webhelpers.feedgenerator import Atom1Feed
             feed = Atom1Feed(
-                title=_(u'CKAN Package Revision History'),
+                title=_(u'CKAN Dataset Revision History'),
                 link=h.url_for(controller='revision', action='read', id=c.pkg_dict['name']),
-                description=_(u'Recent changes to CKAN Package: ') + (c.pkg_dict['title'] or ''),
+                description=_(u'Recent changes to CKAN Dataset: ') + (c.pkg_dict['title'] or ''),
                 language=unicode(get_lang()),
             )
             for revision_dict in c.pkg_revisions:
@@ -317,14 +405,19 @@ class PackageController(BaseController):
                 )
             feed.content_type = 'application/atom+xml'
             return feed.writeString('utf-8')
-        return render('package/history.html')
+
+        c.related_count = len(c.pkg.related)
+        return render( self._history_template(c.pkg_dict.get('type',package_type)))
 
     def new(self, data=None, errors=None, error_summary=None):
+        package_type = self._guess_package_type(True)
+
         context = {'model': model, 'session': model.Session,
                    'user': c.user or c.author, 'extras_as_string': True,
-                   'save': 'save' in request.params,
-                   'schema': self._form_to_db_schema()}
+                   'save': 'save' in request.params,}
 
+        # Package needs to have a organization group in the call to check_access
+        # and also to save it
         try:
             check_access('package_create',context)
         except NotAuthorized:
@@ -333,42 +426,49 @@ class PackageController(BaseController):
         if context['save'] and not data:
             return self._save_new(context)
 
-        data = data or dict(request.params) 
+        data = data or clean_dict(unflatten(tuplize_dict(parse_params(
+            request.params, ignore_keys=[CACHE_PARAMETER]))))
+        c.resources_json = json.dumps(data.get('resources',[]))
+
         errors = errors or {}
         error_summary = error_summary or {}
         vars = {'data': data, 'errors': errors, 'error_summary': error_summary}
+        c.errors_json = json.dumps(errors)
 
         self._setup_template_variables(context, {'id': id})
-        c.form = render(self.package_form, extra_vars=vars)
 
-        return render('package/new.html')
+        # TODO: This check is to maintain backwards compatibility with the old way of creating
+        # custom forms. This behaviour is now deprecated.
+        if hasattr(self, 'package_form'):
+            c.form = render(self.package_form, extra_vars=vars)
+        else:
+            c.form = render(self._package_form(package_type=package_type), extra_vars=vars)
+        return render( self._new_template(package_type))
 
 
     def edit(self, id, data=None, errors=None, error_summary=None):
+        package_type = self._get_package_type(id)
         context = {'model': model, 'session': model.Session,
                    'user': c.user or c.author, 'extras_as_string': True,
                    'save': 'save' in request.params,
                    'moderated': config.get('moderated'),
-                   'pending': True,
-                   'schema': self._form_to_db_schema()}
+                   'for_edit': True,
+                   'pending': True,}
 
         if context['save'] and not data:
             return self._save_edit(id, context)
         try:
             old_data = get_action('package_show')(context, {'id':id})
-            schema = self._db_to_form_schema()
-            if schema and not data:
-                old_data, errors = validate(old_data, schema, context=context)
             data = data or old_data
             # Merge all elements for the complete package dictionary
             c.pkg_dict = dict(old_data.items() + data.items())
         except NotAuthorized:
             abort(401, _('Unauthorized to read package %s') % '')
         except NotFound:
-            abort(404, _('Package not found'))
+            abort(404, _('Dataset not found'))
 
         c.pkg = context.get("package")
-        c.pkg_json = json.dumps(data)
+        c.resources_json = json.dumps(data.get('resources',[]))
 
         try:
             check_access('package_update',context)
@@ -377,28 +477,43 @@ class PackageController(BaseController):
 
         errors = errors or {}
         vars = {'data': data, 'errors': errors, 'error_summary': error_summary}
+        c.errors_json = json.dumps(errors)
 
-        self._setup_template_variables(context, {'id': id})
+        self._setup_template_variables(context, {'id': id}, package_type=package_type)
+        c.related_count = len(c.pkg.related)
 
-        c.form = render(self.package_form, extra_vars=vars)
-        return render('package/edit.html')
+        # TODO: This check is to maintain backwards compatibility with the old way of creating
+        # custom forms. This behaviour is now deprecated.
+        if hasattr(self, 'package_form'):
+            c.form = render(self.package_form, extra_vars=vars)
+        else:
+            c.form = render(self._package_form(package_type=package_type), extra_vars=vars)
+
+        if (c.action == u'editresources'):
+          return render('package/editresources.html')
+        else:
+          return render('package/edit.html')
+
+    def editresources(self, id, data=None, errors=None, error_summary=None):
+        '''Hook method made available for routing purposes.'''
+        return self.edit(id,data,errors,error_summary)
 
     def read_ajax(self, id, revision=None):
+        package_type=self._get_package_type(id)
         context = {'model': model, 'session': model.Session,
                    'user': c.user or c.author,
                    'extras_as_string': True,
-                   'schema': self._form_to_db_schema(),
+                   'schema': self._form_to_db_schema(package_type=package_type),
                    'revision_id': revision}
-
         try:
             data = get_action('package_show')(context, {'id': id})
-            schema = self._db_to_form_schema()
+            schema = self._db_to_form_schema(package_type=package_type)
             if schema:
                 data, errors = validate(data, schema)
         except NotAuthorized:
             abort(401, _('Unauthorized to read package %s') % '')
         except NotFound:
-            abort(404, _('Package not found'))
+            abort(404, _('Dataset not found'))
 
         ## hack as db_to_form schema should have this
         data['tag_string'] = ', '.join([tag['name'] for tag in data.get('tags', [])])
@@ -418,7 +533,7 @@ class PackageController(BaseController):
         except NotAuthorized:
             abort(401, _('Unauthorized to read package %s') % '')
         except NotFound:
-            abort(404, _('Package not found'))
+            abort(404, _('Dataset not found'))
 
 
         data = []
@@ -428,22 +543,35 @@ class PackageController(BaseController):
                 current_approved, approved = True, True
             else:
                 current_approved = False
-            
+
             data.append({'revision_id': revision['id'],
                          'message': revision['message'],
                          'timestamp': revision['timestamp'],
                          'author': revision['author'],
                          'approved': bool(revision['approved_timestamp']),
                          'current_approved': current_approved})
-                
+
         response.headers['Content-Type'] = 'application/json;charset=utf-8'
         return json.dumps(data)
 
-    def _save_new(self, context):
+    def _get_package_type(self, id):
+        """
+        Given the id of a package it determines the plugin to load
+        based on the package's type name (type). The plugin found
+        will be returned, or None if there is no plugin associated with
+        the type.
+        """
+        pkg = model.Package.get(id)
+        if pkg:
+            return pkg.type or 'package'
+        return None
+
+    def _save_new(self, context, package_type=None):
+        from ckan.lib.search import SearchIndexError
         try:
             data_dict = clean_dict(unflatten(
                 tuplize_dict(parse_params(request.POST))))
-            self._check_data_dict(data_dict)
+            data_dict['type'] = package_type
             context['message'] = data_dict.get('log_message', '')
             pkg = get_action('package_create')(context, data_dict)
 
@@ -451,7 +579,7 @@ class PackageController(BaseController):
         except NotAuthorized:
             abort(401, _('Unauthorized to read package %s') % '')
         except NotFound, e:
-            abort(404, _('Package not found'))
+            abort(404, _('Dataset not found'))
         except DataError:
             abort(400, _(u'Integrity Error'))
         except SearchIndexError, e:
@@ -461,15 +589,15 @@ class PackageController(BaseController):
             error_summary = e.error_summary
             return self.new(data_dict, errors, error_summary)
 
-    def _save_edit(self, id, context):
+    def _save_edit(self, name_or_id, context):
+        from ckan.lib.search import SearchIndexError
         try:
             data_dict = clean_dict(unflatten(
                 tuplize_dict(parse_params(request.POST))))
-            self._check_data_dict(data_dict)
             context['message'] = data_dict.get('log_message', '')
             if not context['moderated']:
                 context['pending'] = False
-            data_dict['id'] = id
+            data_dict['id'] = name_or_id
             pkg = get_action('package_update')(context, data_dict)
             if request.params.get('save', '') == 'Approve':
                 get_action('make_latest_pending_package_active')(context, data_dict)
@@ -480,7 +608,7 @@ class PackageController(BaseController):
         except NotAuthorized:
             abort(401, _('Unauthorized to read package %s') % id)
         except NotFound, e:
-            abort(404, _('Package not found'))
+            abort(404, _('Dataset not found'))
         except DataError:
             abort(400, _(u'Integrity Error'))
         except SearchIndexError, e:
@@ -488,7 +616,7 @@ class PackageController(BaseController):
         except ValidationError, e:
             errors = e.error_dict
             error_summary = e.error_summary
-            return self.edit(id, data_dict, errors, error_summary)
+            return self.edit(name_or_id, data_dict, errors, error_summary)
 
     def _form_save_redirect(self, pkgname, action):
         '''This redirects the user to the CKAN package/read page,
@@ -498,21 +626,14 @@ class PackageController(BaseController):
         @param action - What the action of the edit was
         '''
         assert action in ('new', 'edit')
-        if action == 'new':
-            msg = _('<span class="new-dataset">Congratulations, your dataset has been created. ' \
-                    '<a href="%s">Upload or link ' \
-                    'some data now &raquo;</a></span>')
-            msg = msg % h.url_for(controller='package', action='edit',
-                    id=pkgname, anchor='section-resources')
-            h.flash_success(msg,allow_html=True)
         url = request.params.get('return_to') or \
               config.get('package_%s_return_url' % action)
         if url:
             url = url.replace('<NAME>', pkgname)
         else:
             url = h.url_for(controller='package', action='read', id=pkgname)
-        redirect(url)        
-        
+        redirect(url)
+
     def _adjust_license_id_options(self, pkg, fs):
         options = fs.license_id.render_opts['options']
         is_included = False
@@ -526,7 +647,7 @@ class PackageController(BaseController):
     def authz(self, id):
         pkg = model.Package.get(id)
         if pkg is None:
-            abort(404, gettext('Package not found'))
+            abort(404, gettext('Dataset not found'))
         c.pkg = pkg # needed to add in the tab bar to the top of the auth page
         c.pkgname = pkg.name
         c.pkgtitle = pkg.title
@@ -540,25 +661,17 @@ class PackageController(BaseController):
         if not c.authz_editable:
             abort(401, gettext('User %r not authorized to edit %s authorizations') % (c.user, id))
 
-        current_uors = self._get_userobjectroles(id)
-        self._handle_update_of_authz(current_uors, pkg)
+        roles = self._handle_update_of_authz(pkg)
+        self._prepare_authz_info_for_render(roles)
 
-        # get the roles again as may have changed
-        user_object_roles = self._get_userobjectroles(id)
-        self._prepare_authz_info_for_render(user_object_roles)
+        # c.related_count = len(pkg.related)
+
         return render('package/authz.html')
-
-
-    def _get_userobjectroles(self, pkg_id):
-        pkg = model.Package.get(pkg_id)
-        uors = model.Session.query(model.PackageRole).join('package').filter_by(name=pkg.name).all()
-        return uors
-
 
     def autocomplete(self):
         # DEPRECATED in favour of /api/2/util/dataset/autocomplete
         q = unicode(request.params.get('q', ''))
-        if not len(q): 
+        if not len(q):
             return ''
 
         context = {'model': model, 'session': model.Session,
@@ -614,17 +727,6 @@ class PackageController(BaseController):
         else:
             model.Session.commit()
 
-    def _person_email_link(self, name, email, reference):
-        if email:
-            if not name:
-                name = email
-            return h.mail_to(email_address=email, name=name, encode='javascript')
-        else:
-            if name:
-                return name
-            else:
-                return reference + " unknown"
-
     def resource_read(self, id, resource_id):
         context = {'model': model, 'session': model.Session,
                    'user': c.user or c.author}
@@ -646,6 +748,69 @@ class PackageController(BaseController):
             c.package['isopen'] = model.Package.get_license_register()[license_id].isopen()
         except KeyError:
             c.package['isopen'] = False
+        c.datastore_api = h.url_for('datastore_read', id=c.resource.get('id'),
+                qualified=True)
 
+        c.related_count = len(c.pkg.related)
         return render('package/resource_read.html')
+
+    def resource_embedded_dataviewer(self, id, resource_id):
+        """
+        Embeded page for a read-only resource dataview.
+        """
+        context = {'model': model, 'session': model.Session,
+                   'user': c.user or c.author}
+
+        try:
+            c.resource = get_action('resource_show')(context, {'id': resource_id})
+            c.package = get_action('package_show')(context, {'id': id})
+            c.resource_json = json.dumps(c.resource)
+
+            # double check that the resource belongs to the specified package
+            if not c.resource['id'] in [ r['id'] for r in c.package['resources'] ]:
+                raise NotFound
+
+        except NotFound:
+            abort(404, _('Resource not found'))
+        except NotAuthorized:
+            abort(401, _('Unauthorized to read resource %s') % id)
+
+        # Construct the recline state
+        state_version = int(request.params.get('state_version', '1'))
+        recline_state = self._parse_recline_state(request.params)
+        if recline_state is None:
+            abort(400, ('"state" parameter must be a valid recline state (version %d)' % state_version))
+
+        c.recline_state = json.dumps(recline_state)
+
+        c.width = max(int(request.params.get('width', 500)), 100)
+        c.height = max(int(request.params.get('height', 500)), 100)
+        c.embedded = True
+
+        return render('package/resource_embedded_dataviewer.html')
+
+    def _parse_recline_state(self, params):
+        state_version = int(request.params.get('state_version', '1'))
+        if state_version != 1:
+            return None
+
+        recline_state = {}
+        for k,v in request.params.items():
+            try:
+                v = json.loads(v)
+            except ValueError:
+                pass
+            recline_state[k] = v
+
+        recline_state.pop('width', None)
+        recline_state.pop('height', None)
+        recline_state['readOnly'] = True
+
+        # Ensure only the currentView is available
+        if not recline_state.get('currentView', None):
+            recline_state['currentView'] = 'grid'   # default to grid view if none specified
+        for k in recline_state.keys():
+            if k.startswith('view-') and not k.endswith(recline_state['currentView']):
+                recline_state.pop(k)
+        return recline_state
 

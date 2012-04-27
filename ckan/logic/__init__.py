@@ -1,10 +1,12 @@
 import logging
 from ckan.lib.base import _
 import ckan.authz
-import ckan.new_authz as new_authz
+from ckan.new_authz import is_authorized
 from ckan.lib.navl.dictization_functions import flatten_dict, DataError
 from ckan.plugins import PluginImplementations
 from ckan.plugins.interfaces import IActions
+
+log = logging.getLogger(__name__)
 
 class AttributeDict(dict):
     def __getattr__(self, name):
@@ -23,26 +25,47 @@ class ActionError(Exception):
     def __init__(self, extra_msg=None):
         self.extra_msg = extra_msg
 
+    def __str__(self):
+        err_msgs = (super(ActionError, self).__str__(),
+                    self.extra_msg)
+        return ' - '.join([str(err_msg) for err_msg in err_msgs if err_msg])
+
 class NotFound(ActionError):
     pass
 
 class NotAuthorized(ActionError):
     pass
 
-class ValidationError(ActionError):
+class ParameterError(ActionError):
+    pass
+
+
+class ValidationError(ParameterError):
     def __init__(self, error_dict, error_summary=None, extra_msg=None):
         self.error_dict = error_dict
         self.error_summary = error_summary
         self.extra_msg = extra_msg
 
+    def __str__(self):
+        err_msgs = (super(ValidationError, self).__str__(),
+                    self.error_summary)
+        return ' - '.join([str(err_msg) for err_msg in err_msgs if err_msg])
+
 log = logging.getLogger(__name__)
 
-def parse_params(params):
+def parse_params(params, ignore_keys=None):
+    '''Takes a dict and returns it with some values standardised.
+    This is done on a dict before calling tuplize_dict on it.
+    '''
     parsed = {}
     for key in params:
+        if ignore_keys and key in ignore_keys:
+            continue
         value = params.getall(key)
+        # Blank values become ''
         if not value:
             value = ''
+        # A list with only one item is stripped of being a list
         if len(value) == 1:
             value = value[0]
         parsed[key] = value
@@ -84,12 +107,14 @@ def clean_dict(data_dict):
     return data_dict
 
 def tuplize_dict(data_dict):
-    ''' gets a dict with keys of the form 'table__0__key' and converts them
+    '''Takes a dict with keys of the form 'table__0__key' and converts them
     to a tuple like ('table', 0, 'key').
+
+    Dict should be put through parse_dict before this function, to have
+    values standardized.
 
     May raise a DataError if the format of the key is incorrect.
     '''
-
     tuplized_dict = {}
     for key, value in data_dict.iteritems():
         key_list = key.split('__')
@@ -126,7 +151,7 @@ def check_access(action, context, data_dict=None):
         #    # TODO Check the API key is valid at some point too!
         #    log.debug('Valid API key needed to make changes')
         #    raise NotAuthorized
-        logic_authorization = new_authz.is_authorized(action, context, data_dict)
+        logic_authorization = is_authorized(action, context, data_dict)
         if not logic_authorization['success']:
             msg = logic_authorization.get('msg','')
             raise NotAuthorized(msg)
@@ -200,3 +225,29 @@ def get_action(action):
     _actions.update(fetched_actions)
     return _actions.get(action)
 
+def get_or_bust(data_dict, keys):
+    '''Try and get values from dictionary and if they are not there
+    raise a validataion error.
+
+    data_dict: a dictionary
+    keys: either a single string key in which case will return a single value,
+    or a iterable which will return a tuple for unpacking purposes.
+
+    e.g single_value = get_or_bust(data_dict, 'a_key')
+        value_1, value_2 = get_or_bust(data_dict, ['key1', 'key2'])
+    '''
+    values = []
+    errors = {}
+
+    if isinstance(keys, basestring):
+        keys = [keys]
+    for key in keys:
+        value = data_dict.get(key)
+        if not value:
+            errors[key] = _('Missing value')
+        values.append(value)
+    if errors:
+        raise ValidationError(errors)
+    if len(values) == 1:
+        return values[0]
+    return tuple(values)

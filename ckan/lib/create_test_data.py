@@ -6,11 +6,16 @@ class CreateTestData(cli.CkanCommand):
     '''Create test data in the database.
     Tests can also delete the created objects easily with the delete() method.
 
-    create-test-data         - annakarenina and warandpeace
-    create-test-data search  - realistic data to test search
-    create-test-data gov     - government style data
-    create-test-data family  - package relationships data
-    create-test-data user    - create a user 'tester' with api key 'tester'
+    create-test-data              - annakarenina and warandpeace
+    create-test-data search       - realistic data to test search
+    create-test-data gov          - government style data
+    create-test-data family       - package relationships data
+    create-test-data user         - create a user 'tester' with api key 'tester'
+    create-test-data translations - annakarenina, warandpeace, and some test
+                                    translations of terms
+    create-test-data vocabs  - annakerenina, warandpeace, and some test
+                               vocabularies
+
     '''
     summary = __doc__.split('\n')[0]
     usage = __doc__
@@ -22,7 +27,7 @@ class CreateTestData(cli.CkanCommand):
     tag_names = []
     group_names = set()
     user_refs = []
-    
+
     pkg_core_fields = ['name', 'title', 'version', 'url', 'notes',
                        'author', 'author_email',
                        'maintainer', 'maintainer_email',
@@ -51,6 +56,10 @@ class CreateTestData(cli.CkanCommand):
             self.create_gov_test_data()
         elif cmd == 'family':
             self.create_family_test_data()
+        elif cmd == 'translations':
+            self.create_translations_test_data()
+        elif cmd == 'vocabs':
+            self.create_vocabs_test_data()
         else:
             print 'Command %s not recognized' % cmd
             raise NotImplementedError
@@ -88,8 +97,83 @@ class CreateTestData(cli.CkanCommand):
         cls.user_refs.append(u'tester')
 
     @classmethod
+
+    def create_translations_test_data(cls):
+        import ckan.model
+        CreateTestData.create()
+        rev = ckan.model.repo.new_revision()
+        rev.author = CreateTestData.author
+        rev.message = u'Creating test translations.'
+
+        sysadmin_user = ckan.model.User.get('testsysadmin')
+        package = ckan.model.Package.get('annakarenina')
+
+        # Add some new tags to the package.
+        # These tags are codes that are meant to be always translated before
+        # display, if not into the user's current language then into the
+        # fallback language.
+        package.add_tags([ckan.model.Tag('123'), ckan.model.Tag('456'),
+                ckan.model.Tag('789')])
+
+        # Add the above translations to CKAN.
+        for (lang_code, translations) in (('de', german_translations),
+                ('fr', french_translations), ('en', english_translations)):
+            for term in terms:
+                if term in translations:
+                    data_dict = {
+                            'term': term,
+                            'term_translation': translations[term],
+                            'lang_code': lang_code,
+                            }
+                    context = {
+                        'model': ckan.model,
+                        'session': ckan.model.Session,
+                        'user': sysadmin_user.name,
+                    }
+                    ckan.logic.action.update.term_translation_update(context,
+                            data_dict)
+
+        ckan.model.Session.commit()
+
+    def create_vocabs_test_data(cls):
+        import ckan.model
+        CreateTestData.create()
+        sysadmin_user = ckan.model.User.get('testsysadmin')
+        annakarenina = ckan.model.Package.get('annakarenina')
+        warandpeace = ckan.model.Package.get('warandpeace')
+
+        # Create a couple of vocabularies.
+        context = {
+                'model': ckan.model,
+                'session': ckan.model.Session,
+                'user': sysadmin_user.name
+                }
+        data_dict = {
+                'name': 'Genre',
+                'tags': [{'name': 'Drama'}, {'name': 'Sci-Fi'},
+                    {'name': 'Mystery'}],
+                }
+        ckan.logic.action.create.vocabulary_create(context, data_dict)
+
+        data_dict = {
+                'name': 'Actors',
+                'tags': [{'name': 'keira-knightley'}, {'name': 'jude-law'},
+                    {'name': 'alessio-boni'}],
+                }
+        ckan.logic.action.create.vocabulary_create(context, data_dict)
+
+        # Add some vocab tags to some packages.
+        genre_vocab = ckan.model.Vocabulary.get('Genre')
+        actors_vocab = ckan.model.Vocabulary.get('Actors')
+        annakarenina.add_tag_by_name('Drama', vocab=genre_vocab)
+        annakarenina.add_tag_by_name('keira-knightley', vocab=actors_vocab)
+        annakarenina.add_tag_by_name('jude-law', vocab=actors_vocab)
+        warandpeace.add_tag_by_name('Drama', vocab=genre_vocab)
+        warandpeace.add_tag_by_name('alessio-boni', vocab=actors_vocab)
+
+    @classmethod
     def create_arbitrary(cls, package_dicts, relationships=[],
-            extra_user_names=[], extra_group_names=[], 
+            extra_user_names=[], extra_group_names=[],
             admins=[]):
         '''Creates packages and a few extra objects as well at the
         same time if required.
@@ -101,7 +185,7 @@ class CreateTestData(cli.CkanCommand):
         @param extra_group_names - a list of group names to create. No
                                properties get set though.
         @param admins - a list of user names to make admins of all the
-                               packages created.                           
+                               packages created.
         '''
         assert isinstance(relationships, (list, tuple))
         assert isinstance(extra_user_names, (list, tuple))
@@ -111,11 +195,11 @@ class CreateTestData(cli.CkanCommand):
         new_user_names = extra_user_names
         new_group_names = set()
         new_groups = {}
-        
-        rev = model.repo.new_revision() 
+
+        rev = model.repo.new_revision()
         rev.author = cls.author
         rev.message = u'Creating test packages.'
-        
+
         admins_list = defaultdict(list) # package_name: admin_names
         if package_dicts:
             if isinstance(package_dicts, dict):
@@ -131,7 +215,7 @@ class CreateTestData(cli.CkanCommand):
                     if isinstance(val, str):
                         val = unicode(val)
                     if attr=='name':
-                        continue                
+                        continue
                     if attr in cls.pkg_core_fields:
                         pass
                     elif attr == 'download_url':
@@ -160,8 +244,8 @@ class CreateTestData(cli.CkanCommand):
                             if not tag:
                                 tag = model.Tag(name=tag_name)
                                 cls.tag_names.append(tag_name)
-                                model.Session.add(tag)    
-                            pkg.tags.append(tag)
+                                model.Session.add(tag)
+                            pkg.add_tag(tag)
                             model.Session.flush()
                     elif attr == 'groups':
                         model.Session.flush()
@@ -208,8 +292,8 @@ class CreateTestData(cli.CkanCommand):
             model.repo.commit_and_remove()
 
         needs_commit = False
-        
-        rev = model.repo.new_revision() 
+
+        rev = model.repo.new_revision()
         for group_name in extra_group_names:
             group = model.Group(name=unicode(group_name))
             model.Session.add(group)
@@ -258,7 +342,7 @@ class CreateTestData(cli.CkanCommand):
             needs_commit = False
 
         if relationships:
-            rev = model.repo.new_revision() 
+            rev = model.repo.new_revision()
             rev.author = cls.author
             rev.message = u'Creating package relationships.'
 
@@ -270,10 +354,10 @@ class CreateTestData(cli.CkanCommand):
                 needs_commit = True
 
             model.repo.commit_and_remove()
-        
+
 
     @classmethod
-    def create_groups(cls, group_dicts, admin_user_name=None):
+    def create_groups(cls, group_dicts, admin_user_name=None, auth_profile=""):
         '''A more featured interface for creating groups.
         All group fields can be filled, packages added and they can
         have an admin user.'''
@@ -289,6 +373,7 @@ class CreateTestData(cli.CkanCommand):
         group_attributes = set(('name', 'title', 'description', 'parent_id'))
         for group_dict in group_dicts:
             group = model.Group(name=unicode(group_dict['name']))
+            group.type = auth_profile or 'group'
             for key in group_dict:
                 if key in group_attributes:
                     setattr(group, key, group_dict[key])
@@ -307,7 +392,7 @@ class CreateTestData(cli.CkanCommand):
         model.repo.commit_and_remove()
 
     @classmethod
-    def create(cls):
+    def create(cls, auth_profile="", package_type=None):
         import ckan.model as model
         model.Session.remove()
         rev = model.repo.new_revision()
@@ -318,8 +403,13 @@ class CreateTestData(cli.CkanCommand):
  * Package: warandpeace
  * Associated tags, etc etc
 '''
+        if auth_profile == "publisher":
+            organization_group = model.Group(name=u"organization_group", type="organization")
+
         cls.pkg_names = [u'annakarenina', u'warandpeace']
-        pkg1 = model.Package(name=cls.pkg_names[0])
+        pkg1 = model.Package(name=cls.pkg_names[0], type=package_type)
+        if auth_profile == "publisher":
+            pkg1.group = organization_group
         model.Session.add(pkg1)
         pkg1.title = u'A Novel By Tolstoy'
         pkg1.version = u'0.7a'
@@ -363,16 +453,19 @@ Foreign characters:
 u with umlaut \xfc
 66-style quote \u201c
 foreign word: th\xfcmb
- 
+
 Needs escaping:
 left arrow <
 
 <http://ckan.net/>
 
 '''
-        pkg2 = model.Package(name=cls.pkg_names[1])
+        pkg2 = model.Package(name=cls.pkg_names[1], type=package_type)
         tag1 = model.Tag(name=u'russian')
         tag2 = model.Tag(name=u'tolstoy')
+
+        if auth_profile == "publisher":
+            pkg2.group = organization_group
 
         # Flexible tag, allows spaces, upper-case,
         # and all punctuation except commas
@@ -380,8 +473,8 @@ left arrow <
 
         for obj in [pkg2, tag1, tag2, tag3]:
             model.Session.add(obj)
-        pkg1.tags = [tag1, tag2, tag3]
-        pkg2.tags = [ tag1, tag3 ]
+        pkg1.add_tags([tag1, tag2, tag3])
+        pkg2.add_tags([ tag1, tag3 ])
         cls.tag_names = [ t.name for t in (tag1, tag2, tag3) ]
         pkg1.license_id = u'other-open'
         pkg2.license_id = u'cc-nc' # closed license
@@ -392,18 +485,20 @@ left arrow <
         # group
         david = model.Group(name=u'david',
                              title=u'Dave\'s books',
-                             description=u'These are books that David likes.')
+                             description=u'These are books that David likes.',
+                             type=auth_profile or 'group')
         roger = model.Group(name=u'roger',
                              title=u'Roger\'s books',
-                             description=u'Roger likes these books.')
+                             description=u'Roger likes these books.',
+                             type=auth_profile or 'group')
         for obj in [david, roger]:
             model.Session.add(obj)
-        
+
         cls.group_names.add(u'david')
         cls.group_names.add(u'roger')
 
         model.Session.flush()
-        
+
         model.Session.add(model.Member(table_id=pkg1.id, table_name='package', group=david))
         model.Session.add(model.Member(table_id=pkg2.id, table_name='package', group=david))
         model.Session.add(model.Member(table_id=pkg1.id, table_name='package', group=roger))
@@ -438,7 +533,7 @@ left arrow <
 
         # Create a couple of authorization groups
         for ag_name in [u'anauthzgroup', u'anotherauthzgroup']:
-            ag=model.AuthorizationGroup.by_name(ag_name) 
+            ag=model.AuthorizationGroup.by_name(ag_name)
             if not ag: #may already exist, if not create
                 ag=model.AuthorizationGroup(name=ag_name)
                 model.Session.add(ag)
@@ -548,9 +643,9 @@ search_items = [{'name':'gils',
                           'format':'DOC',
                           'description':'http://www.statistics.gov.uk/hub/id/119-34565'}],
               'groups':'ukgov test1 test2 penguin',
-              'license':'gpl-3.0',
+              'license':'odc-by',
               'notes':u'''From <http://www.gpoaccess.gov/gils/about.html>
-              
+
 > The Government Information Locator Service (GILS) is an effort to identify, locate, and describe publicly available Federal
 > Because this collection is decentralized, the GPO
 
@@ -595,7 +690,7 @@ penguin
              {'name':'uk-government-expenditure',
               'title':'UK Government Expenditure',
               'tags':'workshop-20081101,uk,gov,expenditure,finance,public,funding,penguin'.split(','),
-              'groups':'ukgov penguin',              
+              'groups':'ukgov penguin',
               'notes':'''Discussed at [Workshop on Public Information, 2008-11-02](http://okfn.org/wiki/PublicInformation).
 
 Overview is available in Red Book, or Financial Statement and Budget Report (FSBR), [published by the Treasury](http://www.hm-treasury.gov.uk/budget.htm).''',
@@ -604,7 +699,7 @@ Overview is available in Red Book, or Financial Statement and Budget Report (FSB
              {'name':'se-publications',
               'title':'Sweden - Government Offices of Sweden - Publications',
               'url':'http://www.sweden.gov.se/sb/d/574',
-              'groups':'penguin',              
+              'groups':'penguin',
               'tags':u'country-sweden,format-pdf,access-www,documents,publications,government,eutransparency,penguin,CAPITALS,surprise.,greek omega \u03a9,japanese katakana \u30a1'.split(','),
               'license':'',
               'notes':'''### About
@@ -618,7 +713,7 @@ Not clear.''',
               },
              {'name':'se-opengov',
               'title':'Opengov.se',
-              'groups':'penguin',              
+              'groups':'penguin',
               'url':'http://www.opengov.se/',
               'download_url':'http://www.opengov.se/data/open/',
               'tags':'country-sweden,government,data,penguin'.split(','),
@@ -695,7 +790,7 @@ gov_items = [
     {'name':'weekly-fuel-prices',
      'title':'Weekly fuel prices',
      'notes':'Latest price as at start of week of unleaded petrol and diesel.',
-     'resources':[{'url':'http://www.decc.gov.uk/en/content/cms/statistics/prices.xls', 'format':'XLS', 'description':''}],
+     'resources':[{'url':'http://www.decc.gov.uk/assets/decc/statistics/source/prices/qep211.xls', 'format':'XLS', 'description':'Quarterly 23/2/12'}],
      'url':'http://www.decc.gov.uk/en/content/cms/statistics/source/prices/prices.aspx',
      'author':'DECC Energy Statistics Team',
      'author_email':'energy.stats@decc.gsi.gov.uk',
@@ -720,3 +815,49 @@ gov_items = [
         }
      }
     ]
+
+# Some test terms and translations.
+terms = ('A Novel By Tolstoy',
+    'Index of the novel',
+    'russian',
+    'tolstoy',
+    "Dave's books",
+    "Roger's books",
+    'Other (Open)',
+    'romantic novel',
+    'book',
+    '123',
+    '456',
+    '789',
+    'plain text',
+    'Roger likes these books.',
+)
+english_translations = {
+    '123': 'jealousy',
+    '456': 'realism',
+    '789': 'hypocrisy',
+}
+german_translations = {
+    'A Novel By Tolstoy': 'Roman von Tolstoi',
+    'Index of the novel': 'Index des Romans',
+    'russian': 'Russisch',
+    'tolstoy': 'Tolstoi',
+    "Dave's books": 'Daves Bucher',
+    "Roger's books": 'Rogers Bucher',
+    'Other (Open)': 'Andere (Open)',
+    'romantic novel': 'Liebesroman',
+    'book': 'Buch',
+    '456': 'Realismus',
+    '789': 'Heuchelei',
+    'plain text': 'Klartext',
+    'Roger likes these books.': 'Roger mag diese Bucher.'
+}
+french_translations = {
+    'A Novel By Tolstoy': 'A Novel par Tolstoi',
+    'Index of the novel': 'Indice du roman',
+    'russian': 'russe',
+    'romantic novel': 'roman romantique',
+    'book': 'livre',
+    '123': 'jalousie',
+    '789': 'hypocrisie',
+}

@@ -7,9 +7,9 @@ Reference: CKAN Configuration Options
 
 You can change many important CKAN settings in the CKAN config file. This is the file called ``std.ini`` that you first encountered in :ref:`create-admin-user`. It is usually located at ``/etc/ckan/std/std.ini``.
 
-The file is well-documented, but we recommend reading this section in full to learn about the CKAN config options available to you. 
+The file is well-documented, but we recommend reading this section in full to learn about the CKAN config options available to you.
 
-.. note:: After editing this file, you will need to restart Apache for the changes to take effect. 
+.. note:: After editing this file, you will need to restart Apache for the changes to take effect.
 
 .. note:: The CKAN config file also includes general Pylons options. All CKAN-specific settings are in the `[app:main]` section.
 
@@ -57,7 +57,7 @@ site_logo
 
 Example::
 
- ckan.site_logo=/images/ckan_logo_fullname_long.png
+ ckan.site_logo = /images/ckan_logo_fullname_long.png
 
 Default value:  (none)
 
@@ -70,6 +70,42 @@ This sets the logo used in the title bar.
 .. index::
    single: package_hide_extras
 
+favicon
+^^^^^^^
+
+Example::
+
+ ckan.favicon = http://okfn.org/wp-content/themes/okfn-master-wordpress-theme/images/favicon.ico
+
+Default value: ``/images/icons/ckan.ico``
+
+This sets the site's `favicon`. This icon is usually displayed by the browser in the tab heading and bookmark.
+
+site_about
+^^^^^^^^^^
+
+Example::
+
+ ckan.site_about=${g.site_title} is a community-driven catalogue of open data for the Greenfield area.
+
+Default value::
+
+ What was the <a href="http://thedatahub.org/dataset/house-prices-uk-from-1930">average price</a> of a house in the UK in 1935? When will India's projected population <a href="http://thedatahub.org/dataset/guardian-population-unitednations">overtake</a> that of China? Where can you see <a href="http://thedatahub.org/dataset/seattle-public-art">publicly-funded art</a> in Seattle? Data to answer many, many questions like these is out there on the Internet somewhere - but it is not always easy to find.</p>
+
+  <p i18n:msg="">${g.site_title} is a community-run catalogue of useful sets of data on the Internet. You can collect links here to data from around the web for yourself and others to use, or search for data that others have collected. Depending on the type of data (and its conditions of use), ${g.site_title} may also be able to store a copy of the data or host it in a database, and provide some basic visualisation tools.
+
+This changes the text about the site on the 'About' page. i.e. replaces the text in the "About <site_name" section. The other sections of the About page are not affected.
+
+Format tips:
+
+ * multiline strings can be used by indenting following lines
+
+ * the format is basically HTML, but with Genshi-format strings
+
+ * the about text will be automatically be placed with-in paragraph tags ``<p>...</p>`` but you can start new paragraphs within that by using ``</p><p>``
+
+.. note:: Whilst the default text is translated into many languages (switchable in the page footer), the text in this configuration option will not be translatable.
+
 package_hide_extras
 ^^^^^^^^^^^^^^^^^^^
 
@@ -79,9 +115,9 @@ Example::
 
 Default value:  (empty)
 
-This sets a space-separated list of extra field key values which will not be shown on the dataset read page. 
+This sets a space-separated list of extra field key values which will not be shown on the dataset read page.
 
-.. warning::  While this is useful to e.g. create internal notes, it is not a security measure. The keys will still be available via the API and in revision diffs. 
+.. warning::  While this is useful to e.g. create internal notes, it is not a security measure. The keys will still be available via the API and in revision diffs.
 
 .. index::
    single: rdf_packages
@@ -114,7 +150,7 @@ Example::
 
 If there is a page which allows you to download a dump of the entire catalogue then specify the URL and the format here, so that it can be advertised in the web interface. ``dumps_format`` is just a string for display.
 
-For more information on using dumpfiles, see :doc:`database_dumps`.
+For more information on using dumpfiles, see :doc:`database-dumps`.
 
 recaptcha
 ^^^^^^^^^
@@ -130,6 +166,19 @@ To get a Recaptcha account, sign up at: http://www.google.com/recaptcha
 And there is an option for the default expiry time if not specified::
 
  ckan.cache.default_expires = 600
+
+
+datasets_per_page
+^^^^^^^^^^^^^^^^^
+
+Example::
+
+ ckan.datasets_per_page = 10
+
+Default value:  ``20``
+
+This controls the pagination of the dataset search results page. This is the maximum number of datasets viewed per page of results.
+
 
 Authentication Settings
 -----------------------
@@ -206,6 +255,35 @@ Default value: (none)
 If you want to specify the ordering of all or some of the locales as they are offered to the user, then specify them here in the required order. Any locales that are available but not specified in this option, will still be offered at the end of the list.
 
 
+Storage Settings
+----------------
+
+.. index::
+   single: ckan.storage.bucket, ckan.storage.directory
+
+ckan.storage.bucket
+^^^^^^^^^^^^^^^^^^^
+
+Example::
+
+  ckan.storage.bucket = ckan
+
+Default value:  ``None``
+
+This setting will change the bucket name for the uploaded files.
+
+ckan.storage.directory
+^^^^^^^^^^^^^^^^^^^^^^
+
+Example::
+
+  ckan.storage.directory = /data/uploads/
+
+Default value:  ``None``
+
+Use this to specify where uploaded files should be stored, and also to turn on the handling of file storage. The folder should exist, and will automatically be turned into a valid pairtree repository if it is not already.
+
+
 
 Theming Settings
 ----------------
@@ -245,13 +323,13 @@ HTML content to be inserted just before ``</head>`` tag (e.g. extra stylesheet)
 
 Example::
 
-  ckan.template_head_end = <link rel="stylesheet" href="http://mysite.org/css/custom.css" type="text/css"> 
+  ckan.template_head_end = <link rel="stylesheet" href="http://mysite.org/css/custom.css" type="text/css">
 
 You can also have multiline strings. Just indent following lines. e.g.::
 
- ckan.template_head_end = 
-  <link rel="stylesheet" href="/css/extra1.css" type="text/css"> 
-  <link rel="stylesheet" href="/css/extra2.css" type="text/css"> 
+ ckan.template_head_end =
+  <link rel="stylesheet" href="/css/extra1.css" type="text/css">
+  <link rel="stylesheet" href="/css/extra2.css" type="text/css">
 
 template_footer_end
 ^^^^^^^^^^^^^^^^^^^
@@ -289,7 +367,11 @@ Example::
 
 Default value:  ``standard``
 
-This sets the name of the form to use when editing a dataset. This can be a form defined in the core CKAN code or in another setuputils-managed python module. The only requirement is that the ``setup.py`` file has an entry point for the form defined in the ``ckan.forms`` section. 
+This sets the name of the Formalchemy form to use when editing a dataset.
+
+.. note:: This setting only applies to the deprecated Formalchemy forms. For enabling forms defined with a Navl schema, see :doc:`forms`.
+
+The value for this setting can be a Formalchemy form defined in the core CKAN code or in another setuputils-managed python module. The only requirement is that the ``setup.py`` file has an entry point for the form defined in the ``ckan.forms`` section.
 
 For more information on forms, see :doc:`forms`.
 
@@ -321,17 +403,18 @@ A url pointing to a JSON file containing a list of licence objects. This list
 determines the licences offered by the system to users, for example when
 creating or editing a dataset.
 
-This is entirely optional - by default, the system will use the CKAN list of
-licences available in the `Python licenses package <http://pypi.python.org/pypi/licenses>`_.
+This is entirely optional - by default, the system will use an internal cached
+version of the CKAN list of licences available from the
+http://licenses.opendefinition.org/licenses/groups/ckan.json.
 
-More details about the CKAN license objects - including the licence format and some
-example licence lists - can be found at the `Open Licenses Service 
+More details about the license objects - including the licence format and some
+example licence lists - can be found at the `Open Licenses Service
 <http://licenses.opendefinition.org/>`_.
 
 Examples::
- 
- licenses_group_url = file:///path/to/my/local/json-list-of-licenses.js
- licenses_group_url = http://licenses.opendefinition.org/2.0/ckan_original
+
+ licenses_group_url = file:///path/to/my/local/json-list-of-licenses.json
+ licenses_group_url = http://licenses.opendefinition.org/licenses/groups/od.json
 
 
 Messaging Settings
@@ -422,13 +505,27 @@ solr_url
 
 Example::
 
- solr_url = http://solr.okfn.org:8983/solr
- 
-This configures the Solr server used for search. The SOLR schema must be one of the ones in ``ckan/config/solr`` (generally the last one).
+ solr_url = http://solr.okfn.org:8983/solr/ckan-schema-1.3
 
-Optionally, ``solr_user`` and ``solr_password`` can also be passed along to specify HTTP Basic authentication details for all Solr requests. 
+Default value:  ``http://solr.okfn.org:8983/solr``
+
+This configures the Solr server used for search. The Solr schema found at that URL must be one of the ones in ``ckan/config/solr`` (generally the most recent one). A check of the schema version number occurs when CKAN starts.
+
+Optionally, ``solr_user`` and ``solr_password`` can also be configured to specify HTTP Basic authentication details for all Solr requests.
 
 Note, if you change this value, you need to rebuild the search index.
+
+simple_search
+^^^^^^^^^^^^^
+
+Example::
+
+ ckan.simple_search = true
+
+Default value:  ``false``
+
+Switching this on tells CKAN search functionality to just query the database, (rather than using Solr). In this setup, search is crude and limited, e.g. no full-text search, no faceting, etc. However, this might be very useful for getting up and running quickly with CKAN.
+
 
 Site Settings
 -------------
@@ -492,7 +589,7 @@ Authorization Settings
 ----------------------
 
 .. index::
-   single: default_roles
+   single: default_roles, auth_profile
 
 default_roles
 ^^^^^^^^^^^^^
@@ -510,7 +607,6 @@ With this example setting, visitors and logged-in users can only read datasets t
 
 Defaults: see in ``ckan/model/authz.py`` for: ``default_default_user_roles``
 
-
 Plugin Settings
 ---------------
 
@@ -522,11 +618,11 @@ plugins
 
 Example::
 
-  ckan.plugins = disqus synchronous_search datapreview googleanalytics stats storage follower
+  ckan.plugins = disqus datapreview googleanalytics follower
 
-Specify which CKAN extensions are to be enabled. 
+Specify which CKAN extensions are to be enabled.
 
-.. warning::  If you specify an extension but have not installed the code,  CKAN will not start. 
+.. warning::  If you specify an extension but have not installed the code,  CKAN will not start.
 
 Format as a space-separated list of the extension names. The extension name is the key in the [ckan.plugins] section of the extension's ``setup.py``. For more information on extensions, see :doc:`extensions`.
 
@@ -545,7 +641,7 @@ Example::
 
   ckan.log_dir = /var/log/ckan/
 
-This is the directory to which CKAN cron scripts (if there are any installed) should write log files. 
+This is the directory to which CKAN cron scripts (if there are any installed) should write log files.
 
 .. note::  This setting is nothing to do with the main CKAN log file, whose filepath is set in the ``[handler_file]`` args.
 
@@ -559,7 +655,7 @@ Example::
 
   ckan.dump_dir = /var/lib/ckan/dump/
 
-This is the directory to which JSON or CSV dumps of the database are to be written, assuming a script has been installed to do this. 
+This is the directory to which JSON or CSV dumps of the database are to be written, assuming a script has been installed to do this.
 
 .. note::  It is usual to set up the Apache config to serve this directory.
 
@@ -575,3 +671,21 @@ Example::
 
 This is a directory where SQL database backups are to be written, assuming a script has been installed to do this.
 
+
+
+Compatability
+-------------
+
+.. index::
+   single: restrict_template_vars
+
+restrict_template_vars
+^^^^^^^^^^^^^^^^^^^^^^
+
+Example::
+
+  ckan.restrict_template_vars = true
+
+Default value:  ``false``
+
+This is used to limit the functions available via h in templates.  It also forces correct usage of functions as some function signatures have changed.  It's main purpose is to allow transition to a cleaner world.
