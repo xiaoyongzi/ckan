@@ -14,7 +14,7 @@ class TestPackageEditAuthz(TestController):
         # two packages test6 and test6a, m-a is admin on both
         model.repo.init_db()
         model.repo.new_revision()
-        
+
         self.sysadmin = 'madeup-sysadmin'
         sysadmin_user = model.User(name=unicode(self.sysadmin))
         self.admin = 'madeup-administrator'
@@ -51,7 +51,7 @@ class TestPackageEditAuthz(TestController):
         res = self.app.get(offset, status=[302, 401])
         res = res.follow()
         assert res.request.url.startswith('/user/login')
-     
+
     def test_1_admin_has_access(self):
         offset = url_for(controller='package', action='authz', id=self.pkgname)
         res = self.app.get(offset, extra_environ={'REMOTE_USER':
@@ -61,7 +61,7 @@ class TestPackageEditAuthz(TestController):
         offset = url_for(controller='package', action='authz', id=self.pkgname)
         res = self.app.get(offset, extra_environ={'REMOTE_USER':
             self.sysadmin})
-    
+
     def test_2_read_ok(self):
         offset = url_for(controller='package', action='authz', id=self.pkgname)
         res = self.app.get(offset, extra_environ={'REMOTE_USER':
@@ -215,7 +215,7 @@ class TestPackageEditAuthz(TestController):
         check_and_set_checkbox(form, u'visitor', u'reader', True, False)
         check_and_set_checkbox(form, u'visitor', u'editor', False, True)
         res = form.submit('save', extra_environ={'REMOTE_USER': user})
- 
+
         # check that the page contains strings for everyone
         assert 'visitor' in res
         assert 'madeup-administrator' in res
@@ -235,79 +235,3 @@ class TestPackageEditAuthz(TestController):
         self.delete_role_as(self.sysadmin)
 
 
-    def test_5_add_change_delete_authzgroup(self):
-        user=self.admin
-
-        # get the authz page, check that authzgroup isn't in there
-        offset = url_for(controller='package', action='authz', id=self.pkgname)
-        res = self.app.get(offset, extra_environ={'REMOTE_USER':user})
-        assert self.pkgname in res
-
-        # check the state of the database
-        self.assert_package_roles_to_be([
-           ('madeup-administrator', 'admin'),
-           ('visitor', 'editor'),
-           ('logged_in', 'editor')])
-
-        # and that corresponding user strings are in the authz page
-        assert 'visitor' in res
-        assert 'madeup-administrator' in res
-        assert 'logged_in' in res
-        assert 'madeup-authzgroup' not in res
-
-        # add madeup-authzgroup as an admin
-        form = res.forms['authzgroup_addform']
-        form.fields['new_user_name'][0].value='madeup-authzgroup'
-        checkbox = [x for x in form.fields['admin'] \
-                      if x.__class__.__name__ == 'Checkbox'][0]
-        # check the checkbox is currently unticked
-        assert checkbox.checked == False
-        # tick it and submit
-        checkbox.checked=True
-        res = form.submit('authz_add', extra_environ={'REMOTE_USER':user})
-        assert "User role(s) added" in res, "don't see flash message"
-
-        # examine the new page for user names/authzgroup names
-        assert 'visitor' in res
-        assert 'madeup-administrator' in res
-        assert 'logged_in' in res
-        assert 'madeup-authzgroup' in res
-
-        # and ensure that the database has changed as expected
-        self.assert_package_roles_to_be([
-           ('madeup-authzgroup', 'admin'),
-           ('madeup-administrator', 'admin'),
-           ('visitor', 'editor'),
-           ('logged_in', 'editor')])
-
-        # check that the checkbox states are what we think they should be
-        # and change madeup-authzgroup from admin to editor
-        form = res.forms['authzgroup_form']
-        check_and_set_checkbox(form, u'madeup-authzgroup', u'editor', False, True)
-        check_and_set_checkbox(form, u'madeup-authzgroup', u'admin', True, False)
-        res = form.submit('authz_save', extra_environ={'REMOTE_USER': user})
-
-        #check database has changed.
-        self.assert_package_roles_to_be([
-           ('madeup-authzgroup', 'editor'),
-           ('madeup-administrator', 'admin'),
-           ('visitor', 'editor'),
-           ('logged_in', 'editor')])
-
-        # now remove madeup-authzgroup entirely
-        form = res.forms['authzgroup_form']
-        check_and_set_checkbox(form, u'madeup-authzgroup', u'editor', True, False)
-        check_and_set_checkbox(form, u'madeup-authzgroup', u'admin', False, False)
-        res = form.submit('authz_save', extra_environ={'REMOTE_USER': user})
-
-        #check database is back to normal
-        self.assert_package_roles_to_be([
-           ('madeup-administrator', 'admin'),
-           ('visitor', 'editor'),
-           ('logged_in', 'editor')])
-
-        # and that page contains only the expected strings
-        assert 'visitor' in res
-        assert 'madeup-administrator' in res
-        assert 'logged_in' in res
-        assert 'madeup-authzgroup' not in res

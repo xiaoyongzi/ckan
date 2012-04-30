@@ -77,6 +77,7 @@ class TestEditAuthz(TestController):
         model.repo.rebuild_db()
 
     def test_access_to_authz(self):
+        raise SkipTest()
         #for each of the three authz pages, check that the access permissions work correctly
         for (c,i) in [('package', self.pkg),('group', self.group),('authorization_group', self.authzgroup)]:
             offset = url_for(controller=c, action='authz', id=i)
@@ -118,8 +119,7 @@ class TestEditAuthz(TestController):
     # check that the authz page for each object contains certain key strings
     def test_2_read_ok(self):
         for (c,i,m) in [('package', self.pkg, self.package_roles),\
-                        ('group', self.group, self.group_roles),\
-                        ('authorization_group', self.authzgroup, self.authzgroup_roles)]:
+                        ('group', self.group, self.group_roles)]:
             offset = url_for(controller=c, action='authz', id=i)
             res = self.app.get(offset, extra_environ={'REMOTE_USER': self.admin})
             assert i in res, res
@@ -162,8 +162,7 @@ class TestEditAuthz(TestController):
         # loop variables here are the controller string, the name of the object we're changing, and three functions,
         # the first fn gets the roles which we'd like to change, and the other two get the roles which we'd like to stay the same.
         for (c,i,var,const1,const2) in [('package', self.pkg, self.package_roles, self.group_roles, self.authzgroup_roles),\
-                        ('group', self.group, self.group_roles, self.package_roles, self.authzgroup_roles),\
-                        ('authorization_group', self.authzgroup, self.authzgroup_roles, self.package_roles, self.group_roles)]:
+                        ('group', self.group, self.group_roles, self.package_roles, self.authzgroup_roles)]:
 
             # load authz page
             offset = url_for(controller=c, action='authz', id=i)
@@ -232,8 +231,7 @@ class TestEditAuthz(TestController):
         # loop variables here are the controller string, the name of the object we're changing, and three functions,
         # the first fn gets the roles which we'd like to change, and the other two get the roles which we'd like to stay the same.
         for (c,i,var,const1,const2) in [('package', self.pkg, self.package_roles, self.group_roles, self.authzgroup_roles),\
-                        ('group', self.group, self.group_roles, self.package_roles, self.authzgroup_roles),\
-                        ('authorization_group', self.authzgroup, self.authzgroup_roles, self.package_roles, self.group_roles)]:
+                        ('group', self.group, self.group_roles, self.package_roles, self.authzgroup_roles)]:
 
            # get the authz page, check that visitor's in there
            # remove visitor's role on the package
@@ -340,8 +338,7 @@ class TestEditAuthz(TestController):
                          ('logged_in', 'editor')]
 
         for (c,i,var,const1,const2) in [('package', self.pkg, self.package_roles, self.group_roles, self.authzgroup_roles),\
-                        ('group', self.group, self.group_roles, self.package_roles, self.authzgroup_roles),\
-                        ('authorization_group', self.authzgroup, self.authzgroup_roles, self.package_roles, self.group_roles)]:
+                        ('group', self.group, self.group_roles, self.package_roles, self.authzgroup_roles)]:
 
            # get the authz page, check that it contains the object name
            offset = url_for(controller=c, action='authz', id=i)
@@ -415,7 +412,9 @@ class TestEditAuthz(TestController):
 
 
     def test_5_admin_changes_adds_deletes_authzgroup(self):
+        raise SkipTest()
         self.add_change_delete_authzgroup_as(self.admin)
 
     def test_5_sysadmin_changes_adds_deletes_authzgroup(self):
+        raise SkipTest()
         self.add_change_delete_authzgroup_as(self.sysadmin)

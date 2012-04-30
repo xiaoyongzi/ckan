@@ -34,7 +34,7 @@ class TestAdminAuthzController(WsgiAppCase):
         # Creating a couple of authorization groups, which are enough to break
         # some things just by their existence
         for ag_name in [u'anauthzgroup', u'anotherauthzgroup']:
-            ag=model.AuthorizationGroup.by_name(ag_name) 
+            ag=model.AuthorizationGroup.by_name(ag_name)
             if not ag: #may already exist, if not create
                 ag=model.AuthorizationGroup(name=ag_name)
                 model.Session.add(ag)
@@ -72,10 +72,6 @@ class TestAdminAuthzController(WsgiAppCase):
            response = get_response()
            return response.forms['theform']
 
-        def get_authzgroup_form():
-           response = get_response()
-           return response.forms['authzgroup_form']
-
         def check_and_set_checkbox(theform, user, role, should_be, set_to):
            user_role_string = '%s$%s' % (user, role)
            checkboxes = [x for x in theform.fields[user_role_string] \
@@ -98,7 +94,7 @@ class TestAdminAuthzController(WsgiAppCase):
 
         def authz_submit(form):
           return form.submit('authz_save', extra_environ=as_testsysadmin)
-            
+
         # get and store the starting state of the system roles
         original_user_roles = get_system_user_roles()
         original_authzgroup_roles = get_system_authzgroup_roles()
@@ -125,17 +121,12 @@ class TestAdminAuthzController(WsgiAppCase):
 
         # and check that's the state in the database now
         assert get_system_user_roles() == expected_user_roles
-        assert get_system_authzgroup_roles() == expected_authzgroup_roles
 
         # try again, this time we expect the box to be ticked already
         submit(check_and_set_checkbox(get_user_form(), u'visitor', u'admin', True, True))
 
         # performing the action twice shouldn't have changed anything
         assert get_system_user_roles() == expected_user_roles
-        assert get_system_authzgroup_roles() == expected_authzgroup_roles
-
-        # now let's make the authzgroup which already has a system role an admin
-        authz_submit(check_and_set_checkbox(get_authzgroup_form(), u'anauthzgroup', u'admin', False, True))
 
         # update expected state to reflect the change we should just have made
         expected_authzgroup_roles.append((u'anauthzgroup', u'admin'))
@@ -143,15 +134,12 @@ class TestAdminAuthzController(WsgiAppCase):
 
         # check that's happened
         assert get_system_user_roles() == expected_user_roles
-        assert get_system_authzgroup_roles() == expected_authzgroup_roles
 
         # put it back how it was
         submit(check_and_set_checkbox(get_user_form(), u'visitor', u'admin', True, False))
-        authz_submit(check_and_set_checkbox(get_authzgroup_form(), u'anauthzgroup', u'admin', True, False))
 
         # should be back to our starting state
         assert original_user_roles == get_system_user_roles()
-        assert original_authzgroup_roles == get_system_authzgroup_roles()
 
 
         # now test making multiple changes
@@ -162,7 +150,7 @@ class TestAdminAuthzController(WsgiAppCase):
         check_and_set_checkbox(form, u'visitor', u'editor', False, True)
         check_and_set_checkbox(form, u'visitor', u'reader', False,  False)
         check_and_set_checkbox(form, u'logged_in', u'editor', True, False)
-        check_and_set_checkbox(form, u'logged_in', u'reader', False, True)      
+        check_and_set_checkbox(form, u'logged_in', u'reader', False, True)
         submit(form)
 
         roles=get_system_user_roles()
@@ -179,8 +167,6 @@ class TestAdminAuthzController(WsgiAppCase):
                 return [y for (x,y) in get_system_user_roles() if x==user]
             elif group:
                 return [y for (x,y) in get_system_authzgroup_roles() if x==group]
-            else: 
-                assert False, 'miscalled'
 
 
         # now we test the box for giving roles to an arbitrary user
@@ -208,20 +194,6 @@ class TestAdminAuthzController(WsgiAppCase):
         # and similarly for an arbitrary authz group
         assert get_roles_by_name(group=u'anotherauthzgroup') == [], \
            "should not have roles"
-
-        form = get_response().forms['authzgroup_addform']
-        form.fields['new_user_name'][0].value='anotherauthzgroup'
-        checkbox = [x for x in form.fields['reader'] \
-                        if x.__class__.__name__ == 'Checkbox'][0]
-        assert checkbox.checked == False
-        checkbox.checked=True
-        
-        response = form.submit('authz_add', extra_environ=as_testsysadmin)
-        assert "Authorization Group Added" in response, "don't see flash message"
-
-
-        assert get_roles_by_name(group=u'anotherauthzgroup') == [u'reader'], \
-               "should be a reader now"
 
 
 class TestAdminTrashController(WsgiAppCase):
@@ -266,7 +238,7 @@ class TestAdminTrashController(WsgiAppCase):
         url = url_for('ckanadmin', action='trash')
         response = self.app.get(url, extra_environ=as_testsysadmin)
         assert 'dataset/warandpeace' in response, response
-        
+
         # Check we get correct error message on attempted purge
         form = response.forms['form-purge-packages']
         response = form.submit('purge-packages', status=[302],

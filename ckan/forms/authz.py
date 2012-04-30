@@ -30,15 +30,6 @@ def get_group_linker(action):
                         action,
                         action)
 
-def get_authorization_group_linker(action):
-    return lambda item: '<a href="%s" title="%s"><img src="http://m.okfn.org/kforge/images/icon-delete.png" alt="%s" class="icon" /></a>' % (
-                        ckan_h.url_for(controller='authorization_group',
-                            action='authz',
-                            id=item.authorization_group.name,
-                            role_to_delete=item.id),
-                        action,
-                        action)
-
 class RolesRenderer(formalchemy.fields.FieldRenderer):
     def render(self, **kwargs):
         selected = kwargs.get('selected', None) or unicode(self.value)
@@ -58,18 +49,14 @@ def authz_fieldset_builder(role_class):
         fs.append(
             Field(u'delete', types.String, get_group_linker(u'delete')).readonly()
             )
-    elif role_class == model.AuthorizationGroupRole:
-        fs.append(
-            Field(u'delete', types.String, get_authorization_group_linker(u'delete')).readonly()
-            )
-        
+
     fs.append(
             # use getattr because though we should always have a user name,
             # sometimes (due to error) we don't and want to avoid a 500 ...
             Field(u'username', types.String,
                 lambda item: ckan_h.linked_user(getattr(item.user, 'name', ''))).readonly()
             )
-            
+
     fs.append(
             Field(u'authzgroupname', types.String,
                 lambda item: getattr(item.authorized_group, 'name', '')).readonly()
@@ -81,8 +68,7 @@ def authz_fieldset_builder(role_class):
             ],
         include=[fs.username,
                  fs.authzgroupname,
-                 fs.role,
-                 fs.delete],
+                 fs.role]
         )
     return fs
 
@@ -118,7 +104,7 @@ def get_new_role_fieldset(role_class):
 
 fieldsets = {}
 def get_authz_fieldset(name):
-    if not fieldsets: 
+    if not fieldsets:
         fieldsets['package_authz_fs'] = authz_fieldset_builder(model.PackageRole)
         fieldsets['group_authz_fs'] = authz_fieldset_builder(model.GroupRole)
         fieldsets['authorization_group_authz_fs'] = authz_fieldset_builder(model.AuthorizationGroupRole)
