@@ -273,6 +273,7 @@ class DefaultDatasetForm(object):
 
         c.licences = [('', '')] + base.model.Package.get_license_options()
         c.is_sysadmin = authz.Authorizer().is_sysadmin(c.user)
+        c.default_language = config.get('ckan.default.package.language', 'en')
 
         if c.pkg:
             c.related_count = len(c.pkg.related)

@@ -9,7 +9,7 @@
 
 <xi:include href="../_util.html" />
 
-<input name="language" type="hidden" value="${data.get('language', 'en')}" />
+<input name="language" type="hidden" value="${data.get('language', c.default_language )}" />
 
 <div class="alert alert-error error-explanation" py:if="error_summary">
 <h2>Errors in form</h2>
