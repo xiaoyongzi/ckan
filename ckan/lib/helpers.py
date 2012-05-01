@@ -438,6 +438,20 @@ def linked_user(user, maxlength=0):
         return _icon + link_to(displayname,
                        url_for(controller='user', action='read', id=_name))
 
+def linked_authorization_group(authgroup, maxlength=0):
+    from ckan import model
+    if not isinstance(authgroup, model.AuthorizationGroup):
+        authgroup_name = unicode(authgroup)
+        authgroup = model.AuthorizationGroup.get(authgroup_name)
+        if not authgroup:
+            return authgroup_name
+    if authgroup:
+        displayname = authgroup.name or authgroup.id
+        if maxlength and len(display_name) > maxlength:
+            displayname = displayname[:maxlength] + '...'
+        return link_to(displayname,
+                       url_for(controller='authorization_group', action='read', id=displayname))
+
 def group_name_to_title(name):
     from ckan import model
     group = model.Group.by_name(name)
@@ -757,6 +771,7 @@ __allowed_functions__ = [
          #  am_authorized, # depreciated
            'check_access',
            'linked_user',
+           'linked_authorization_group',
            'group_name_to_title',
            'markdown_extract',
            'icon',

@@ -216,6 +216,17 @@ def make_map():
     register_package_plugins(map)
     register_group_plugins(map)
 
+    # authz group
+    map.redirect('/authorizationgroups', '/authorizationgroup')
+    map.redirect('/authorizationgroups/{url:.*}', '/authorizationgroup/{url}')
+    with SubMapper(map, controller='authorization_group') as m:
+        m.connect('/authorizationgroup', action='index')
+        m.connect('/authorizationgroup/list', action='list')
+        m.connect('/authorizationgroup/new', action='new')
+        m.connect('/authorizationgroup/edit/{id}', action='edit')
+        m.connect('/authorizationgroup/authz/{id}', action='authz')
+        m.connect('/authorizationgroup/{id}', action='read')
+
     # tags
     map.redirect('/tags', '/tag')
     map.redirect('/tags/{url:.*}', '/tag/{url}')
