@@ -819,7 +819,7 @@ CKAN.View.ResourceAddUpload = Backbone.View.extend({
   uploadFile: function(e) {
     e.preventDefault();
     if (!this.fileData) {
-      alert('No file selected');
+      alert(CKAN.Strings.storageNoFile);
       return;
     }
     var jqXHR = this.fileData.submit();
@@ -853,8 +853,7 @@ CKAN.View.ResourceAddUpload = Backbone.View.extend({
           }
           , {
             error: function(model, error) {
-              var msg = 'Filed uploaded OK but error adding resource: ' + error + '.';
-              msg += 'You may need to create a resource directly. Uploaded file at: ' + data._location;
+              var msg = CKAN.Strings.storageError.replace('%error%', error).replace('%location%', data._location);
               self.setMessage(msg, 'error');
             }
           }
@@ -1159,7 +1158,11 @@ CKAN.Utils = function($, my) {
   my.relatedSetup = function(form) {
     $('[rel=popover]').popover();
 
-    function addAlert(msg) {
+    function addAlert(title, message) {
+        var msg = _.template('<strong><%= title %></strong> <%= msg %>', {
+          title: title,
+          msg: message
+        });
       $('<div class="alert alert-error" />').html(msg).hide().prependTo(form).fadeIn();
     }
 
@@ -1172,7 +1175,7 @@ CKAN.Utils = function($, my) {
         data: data ? JSON.stringify(data) : undefined,
         error: function(err, txt, w) {
           // This needs to be far more informative.
-          addAlert('<strong>Error:</strong> Unable to ' + action + ' related item');
+          addAlert(CKAN.Strings.error, CKAN.Strings.relatedError.replace('%action%', action));
         }
       });
     }
@@ -1241,7 +1244,8 @@ CKAN.Utils = function($, my) {
       event.preventDefault();
 
       // Validate the form
-      var form = $(this), data = {};
+      var form = $(this), data = {}, message;
+
       jQuery.each(form.serializeArray(), function () {
         data[this.name] = this.value;
       });
@@ -1249,12 +1253,12 @@ CKAN.Utils = function($, my) {
       form.find('.alert').remove();
       form.find('.error').removeClass('error');
       if (!data.title) {
-        addAlert('<strong>Missing field:</strong> A title is required');
+        addAlert(CKAN.Strings.missingField, CKAN.Strings.requiredField.replace('%field%', 'title'));
         $('[name=title]').parent().addClass('error');
         return;
       }
       if (!data.url) {
-        addAlert('<strong>Missing field:</strong> A url is required');
+        addAlert(CKAN.Strings.missingField, CKAN.Strings.requiredField.replace('%field%', 'url'));
         $('[name=url]').parent().addClass('error');
         return;
       }
@@ -1422,10 +1426,11 @@ CKAN.DataPreview = function ($, my) {
   // then passes the constructed Dataset, the constructed View, and the
   // reclineState into the DataExplorer constructor.
   my.loadEmbeddedPreview = function(resourceData, reclineState) {
-    my.$dialog.html('<h4>Loading ... <img src="http://assets.okfn.org/images/icons/ajaxload-circle.gif" class="loading-spinner" /></h4>');
-
     // Restore the Dataset from the given reclineState.
-    var dataset = recline.Model.Dataset.restore(reclineState);
+    var dataset = recline.Model.Dataset.restore(reclineState),
+        lang = CKAN.Strings;
+
+    my.$dialog.html('<h4>' + lang.loading + ' <img src="http://assets.okfn.org/images/icons/ajaxload-circle.gif" class="loading-spinner" /></h4>');
 
     // Only create the view defined in reclineState.currentView.
     // TODO: tidy this up.
@@ -1433,7 +1438,7 @@ CKAN.DataPreview = function ($, my) {
     if (reclineState.currentView === 'grid') {
       views = [ {
         id: 'grid',
-        label: 'Grid',
+        label: lang.grid,
         view: new recline.View.Grid({
           model: dataset,
           state: reclineState['view-grid']
@@ -1442,7 +1447,7 @@ CKAN.DataPreview = function ($, my) {
     } else if (reclineState.currentView === 'graph') {
       views = [ {
         id: 'graph',
-        label: 'Graph',
+        label: lang.graph,
         view: new recline.View.Graph({
           model: dataset,
           state: reclineState['view-graph']
@@ -1451,7 +1456,7 @@ CKAN.DataPreview = function ($, my) {
     } else if (reclineState.currentView === 'map') {
       views = [ {
         id: 'map',
-        label: 'Map',
+        label: lang.map,
         view: new recline.View.Map({
           model: dataset,
           state: reclineState['view-map']
@@ -1500,27 +1505,28 @@ CKAN.DataPreview = function ($, my) {
   //
   // Returns nothing.
   my.loadPreviewDialog = function(resourceData) {
-    my.$dialog.html('<h4>Loading ... <img src="http://assets.okfn.org/images/icons/ajaxload-circle.gif" class="loading-spinner" /></h4>');
+    var lang = CKAN.Strings;
+    my.$dialog.html('<h4>' + lang.loading + ' ... <img src="http://assets.okfn.org/images/icons/ajaxload-circle.gif" class="loading-spinner" /></h4>');
 
     function initializeDataExplorer(dataset) {
       var views = [
         {
           id: 'grid',
-          label: 'Grid',
+          label: lang.grid,
           view: new recline.View.Grid({
             model: dataset
           })
         },
         {
           id: 'graph',
-          label: 'Graph',
+          label: lang.graph,
           view: new recline.View.Graph({
             model: dataset
           })
         },
         {
           id: 'map',
-          label: 'Map',
+          label: lang.map,
           view: new recline.View.Map({
             model: dataset
           })
@@ -1688,8 +1694,8 @@ CKAN.DataPreview = function ($, my) {
     var timer = setTimeout(function error() {
       callback({
         error: {
-          title: 'Request Error',
-          message: 'Dataproxy server did not respond after ' + (timeout / 1000) + ' seconds'
+          title: CKAN.Strings.dataProxyGetResourceErrorTitle,
+          message: CKAN.Strings.dataProxyGetResourceErrorMessage.replace('%seconds%', timeout / 1000)
         }
       });
     }, timeout);
