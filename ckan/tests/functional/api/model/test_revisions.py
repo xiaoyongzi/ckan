@@ -1,12 +1,12 @@
-from nose.tools import assert_equal 
+from nose.tools import assert_equal
 
 from ckan import model
 from ckan.lib.create_test_data import CreateTestData
 
 from ckan.tests.functional.api.base import BaseModelApiTestCase
-from ckan.tests.functional.api.base import Api1TestCase as Version1TestCase 
-from ckan.tests.functional.api.base import Api2TestCase as Version2TestCase 
-from ckan.tests.functional.api.base import ApiUnversionedTestCase as UnversionedTestCase 
+from ckan.tests.functional.api.base import Api1TestCase as Version1TestCase
+from ckan.tests.functional.api.base import Api2TestCase as Version2TestCase
+from ckan.tests.functional.api.base import ApiUnversionedTestCase as UnversionedTestCase
 
 class RevisionsTestCase(BaseModelApiTestCase):
 
@@ -19,7 +19,7 @@ class RevisionsTestCase(BaseModelApiTestCase):
     @classmethod
     def teardown_class(cls):
         model.repo.rebuild_db()
-    
+
     def test_register_get_ok(self):
         # Comparison list - newest first
         revs = model.Session.query(model.Revision).\
@@ -38,7 +38,6 @@ class RevisionsTestCase(BaseModelApiTestCase):
         assert rev.id
         assert rev.timestamp.isoformat()
         offset = self.revision_offset(rev.id)
-        print offset
         response = self.app.get(offset, status=[200])
         response_data = self.data_from_res(response)
         assert_equal(rev.id, response_data['id'])
