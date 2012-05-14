@@ -314,23 +314,17 @@ together with their tests.
 Ordering of Extensions
 ----------------------
 
-.. caution ::
- 
-  The order in which extensions are initially loaded is **different** to the order that their plugins are run.
+.. note ::
+  The order in which extensions are returned has changed in ckan 1.8
 
-The order in which extensions are initially loaded is as follows:
+The order in which extensions are used is:
 
 1. System plugins (in setup.py under ``ckan.system_plugins``).
 
 2. In order of the plugins specified in the config file: ``plugins =``.
 
-3. If more than one module has a plugin with the same name specified in the config, then all those are loaded, in the order the modules appear in ``sys.path``.
+3. If a plugin has more than one entry point these are in alphabetical order.
 
-The order that a plugins are run in, for example the order that IRoutes extensions have their ``before_map`` method run, is alphabetical by the plugin class.
-
-e.g. here is the order for these four extensions: ``<Plugin DguInventoryPlugin>``, ``<Plugin FormApiPlugin>``, ``<Plugin StatsPlugin>``, ``<Plugin WalesThemePlugin>``
-
-(This alphabetical ordering is done by ``pyutilib.component.core:ExtensionPoint.extensions()``)
 
 
 Plugin API Documentation
