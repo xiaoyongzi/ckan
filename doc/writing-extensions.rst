@@ -283,7 +283,7 @@ The order in which extensions are used is:
 
 
 Plugin API Documentation
-~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------
 
 .. automodule:: ckan.plugins.core
         :members:
