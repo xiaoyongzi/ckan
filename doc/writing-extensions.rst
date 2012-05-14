@@ -157,10 +157,7 @@ Here's a list of some of the more commonly used plugin interfaces:
 ``IAuthorizer``
     Allows customisation of the default Authorization behaviour.
 
-If you look in `ckan/plugins/interfaces.py
-<https://github.com/okfn/ckan/blob/master/ckan/plugins/interfaces.py>`_ you
-will see the latest plugin interfaces. 
-Alternatively see the `Plugin API documentation`_ below.
+For full list of Plugin Interfaces see the `Plugin API documentation`_ below.
 
 .. .. note::
 ..    The existing 'IRoutesExtension', 'IMapperExtension' and 'ISessionExtension'
@@ -168,6 +165,7 @@ Alternatively see the `Plugin API documentation`_ below.
 
 
 .. _PyUtilib: https://software.sandia.gov/trac/pyutilib
+
 
 Example CKAN Extension
 ----------------------
