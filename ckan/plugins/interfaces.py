@@ -23,6 +23,7 @@ from pyutilib.component.core import Interface as _pca_Interface
 
 
 class Interface(_pca_Interface):
+    ''' This is the base class for Interfaces '''
 
     @classmethod
     def provided_by(cls, instance):
