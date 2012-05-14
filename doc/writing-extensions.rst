@@ -281,6 +281,28 @@ The order in which extensions are used is:
 3. If a plugin has more than one entry point these are in alphabetical order.
 
 
+Writing Extensions
+------------------
+
+.. Note ::
+  Where possible extensions should be written so that they do not rely on a specific version of CKAN.  This means that it is important not to rely on classes/functions in CKAN core.
+
+To enable extensions to be able to use core functionality a helper object is provided `ckan.plugins.toolkit` that is a wrapper for certain functions and classes.  By using this extensions do not need to worry about code changes in CKAN core as the provided functions will continue to be supported.
+
+Example::
+    import ckan.plugins as p
+
+
+    class MyPlugin(p.SingletonPlugin):
+        '''My plugin.'''
+
+        p.implements(p.IConfigurer)
+
+        def update_config(self, config):
+            p.toolkit.add_template_directory(config, 'templates')
+            p.toolkit.add_public_directory(config, 'public')
+
+
 
 Plugin API Documentation
 ------------------------
