@@ -1,5 +1,5 @@
 """
-Provides plugin services to the CKAN
+Provides plugin services to CKAN
 """
 
 import logging

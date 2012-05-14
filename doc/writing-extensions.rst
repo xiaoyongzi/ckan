@@ -103,7 +103,7 @@ architecture. We'll look at this in the next section.
 
 
 Plugins Interface: An Overview
---------------------
+------------------------------
 
 Plugin interfaces provide a specification which extensions can implement in
 order to "hook into" core CKAN functionality. 
@@ -320,7 +320,7 @@ ckan.plugins.interfaces
         :members:
 
 Creating a new Plugin Interface
---------------------------
+-------------------------------
 
 .. Warning ::
   New Plugin Interfaces need to be added to the core CKAN application.
