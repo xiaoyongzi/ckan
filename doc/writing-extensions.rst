@@ -202,8 +202,11 @@ Finally, please also add a summary of your extension and its entry points to the
 http://wiki.ckan.org/Extensions.
 
 
-Writing a Plugin Interface
+Creating a new Plugin Interface
 --------------------------
+
+.. Warning ::
+  New Plugin Interfaces need to be added to the core CKAN application.
 
 This describes how to add a plugin interface to make core CKAN code pluggable. 
 
