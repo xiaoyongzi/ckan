@@ -202,52 +202,6 @@ Finally, please also add a summary of your extension and its entry points to the
 http://wiki.ckan.org/Extensions.
 
 
-Creating a new Plugin Interface
---------------------------
-
-.. Warning ::
-  New Plugin Interfaces need to be added to the core CKAN application.
-
-This describes how to add a plugin interface to make core CKAN code pluggable. 
-
-Suppose you have a class such as this::
-
-    class DataInput(object):
-
-        def accept_new_data(self, data):
-            self.data = data
-
-And you want plugins to hook into ``accept_new_data`` to modify the data.
-
-You would start by declaring an interface specifying the methods that plugin
-classes must provide. You would add the following code to
-``ckan/plugins/interfaces.py``::
-
-    class IDataMunger(Interface):
-
-        def munge(self, data):
-            return data
-
-Now you can tell this class that its plugins are anything that implements ``IDataMunger`` like this::
-
-    from ckan.plugins import PluginImplementations, IDataMunger
-
-    class DataInput(object):
-
-        plugins = PluginImplementations(IDataMunger)
-
-        def accept_new_data(self, data):
-           for plugin in self.plugins:
-               data = plugin.munge(data)
-           self.data = data
-
-Any registered plugins that implement ``IDataMunger`` will then be available in
-your class via ``self.plugin``.
-
-See the pyutilib_ documentation for more information on creating interfaces and
-plugins. However, be aware that pyutilib uses slightly different terminology. It
-calls ``PluginImplementations`` ``ExtensionPoint`` and it calls instances of a
-plugin object a *service*.
 
 
 Testing
@@ -338,3 +292,50 @@ Plugin API Documentation
 
 .. automodule:: ckan.plugins.interfaces
         :members:
+
+Creating a new Plugin Interface
+--------------------------
+
+.. Warning ::
+  New Plugin Interfaces need to be added to the core CKAN application.
+
+This describes how to add a plugin interface to make core CKAN code pluggable. 
+
+Suppose you have a class such as this::
+
+    class DataInput(object):
+
+        def accept_new_data(self, data):
+            self.data = data
+
+And you want plugins to hook into ``accept_new_data`` to modify the data.
+
+You would start by declaring an interface specifying the methods that plugin
+classes must provide. You would add the following code to
+``ckan/plugins/interfaces.py``::
+
+    class IDataMunger(Interface):
+
+        def munge(self, data):
+            return data
+
+Now you can tell this class that its plugins are anything that implements ``IDataMunger`` like this::
+
+    from ckan.plugins import PluginImplementations, IDataMunger
+
+    class DataInput(object):
+
+        plugins = PluginImplementations(IDataMunger)
+
+        def accept_new_data(self, data):
+           for plugin in self.plugins:
+               data = plugin.munge(data)
+           self.data = data
+
+Any registered plugins that implement ``IDataMunger`` will then be available in
+your class via ``self.plugin``.
+
+See the pyutilib_ documentation for more information on creating interfaces and
+plugins. However, be aware that pyutilib uses slightly different terminology. It
+calls ``PluginImplementations`` ``ExtensionPoint`` and it calls instances of a
+plugin object a *service*.
