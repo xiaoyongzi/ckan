@@ -102,7 +102,7 @@ of CKAN in order to extend its functionality. You do this using CKAN's plugin
 architecture. We'll look at this in the next section. 
 
 
-Plugins: An Overview
+Plugins Interface: An Overview
 --------------------
 
 Plugin interfaces provide a specification which extensions can implement in
