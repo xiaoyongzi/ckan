@@ -136,7 +136,7 @@ Here's a list of some of the more commonly used plugin interfaces:
 ``IMapper``
     Listens and react to every database change.
 
-``IRoutes`` and ``IController``
+``IRoutes``
     Provide an implementation to handle a particular URL.
 
 ``IGenshiStreamFilter``
