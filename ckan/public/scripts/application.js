@@ -13,7 +13,6 @@ CKAN.Utils = CKAN.Utils || {};
     CKAN.Utils.setupUserAutocomplete($('input.autocomplete-user'));
     CKAN.Utils.setupOrganizationUserAutocomplete($('input.autocomplete-organization-user'));
     CKAN.Utils.setupGroupAutocomplete($('input.autocomplete-group'));
-    CKAN.Utils.setupAuthzGroupAutocomplete($('input.autocomplete-authzgroup'));
     CKAN.Utils.setupPackageAutocomplete($('input.autocomplete-dataset'));
     CKAN.Utils.setupTagAutocomplete($('input.autocomplete-tag'));
     $('input.autocomplete-format').live('keyup', function(){
@@ -1016,7 +1015,7 @@ CKAN.Utils = function($, my) {
 
         input_box.attr('name', new_name);
         input_box.attr('id', new_name);
-        
+
         var $new = $('<div class="ckan-dataset-to-add"><p></p></div>');
         $new.append($('<input type="hidden" />').attr('name', old_name).val(ui.item.value));
         $new.append('<i class="icon-plus-sign"></i> ');
@@ -1266,25 +1265,6 @@ CKAN.Utils = function($, my) {
     });
   };
 
-  // Attach authz group autocompletion to provided elements
-  //
-  // Requires: jquery-ui autocomplete
-  my.setupAuthzGroupAutocomplete = function(elements) {
-    elements.autocomplete({
-      minLength: 2,
-      source: function(request, callback) {
-        var url = CKAN.SITE_URL + '/api/2/util/authorizationgroup/autocomplete?q=' + request.term;
-        $.getJSON(url, function(data) {
-          $.each(data, function(idx, userobj) {
-            var label = userobj.name;
-            userobj.label = label;
-            userobj.value = userobj.name;
-          });
-          callback(data);
-        });
-      }
-    });
-  };
 
   my.setupGroupAutocomplete = function(elements) {
     elements.autocomplete({
@@ -1462,7 +1442,7 @@ CKAN.Utils = function($, my) {
       },
     });
   };
-  
+
   // This only needs to happen on dataset pages, but it doesn't seem to do
   // any harm to call it anyway.
   $('#user_follow_button').on('click', followButtonClicked);

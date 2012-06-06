@@ -21,10 +21,9 @@ __all__ = ['NotRealUserException', 'Enum', 'Action', 'Role', 'RoleAction',
            'AuthorizationGroupRole', 'SystemRole', 'PSEUDO_USER__VISITOR',
            'PSEUDO_USER__LOGGED_IN', 'init_authz_const_data',
            'init_authz_configuration_data', 'add_user_to_role',
-           'add_authorization_group_to_role', 'setup_user_roles',
+           'setup_user_roles','clear_user_roles',
            'setup_default_user_roles', 'give_all_packages_default_user_roles',
-           'user_has_role', 'remove_user_from_role',
-           'remove_authorization_group_from_role', 'clear_user_roles']
+           'user_has_role', 'remove_user_from_role']
 
 PSEUDO_USER__LOGGED_IN = u'logged_in'
 PSEUDO_USER__VISITOR = u'visitor'
@@ -63,7 +62,7 @@ class Action(Enum):
     USER_READ = u'read-user'
     USER_CREATE = u'create-user'
     UPLOAD_ACTION = u'file-upload'
-    
+
 class Role(Enum):
     ADMIN = u'admin'
     EDITOR = u'editor'
@@ -83,14 +82,14 @@ default_role_actions = [
     (Role.EDITOR, Action.USER_READ),
     (Role.EDITOR, Action.SITE_READ),
     (Role.EDITOR, Action.READ),
-    (Role.EDITOR, Action.UPLOAD_ACTION),    
+    (Role.EDITOR, Action.UPLOAD_ACTION),
     (Role.ANON_EDITOR, Action.EDIT),
     (Role.ANON_EDITOR, Action.PACKAGE_CREATE),
     (Role.ANON_EDITOR, Action.USER_CREATE),
     (Role.ANON_EDITOR, Action.USER_READ),
     (Role.ANON_EDITOR, Action.SITE_READ),
     (Role.ANON_EDITOR, Action.READ),
-    (Role.ANON_EDITOR, Action.UPLOAD_ACTION),        
+    (Role.ANON_EDITOR, Action.UPLOAD_ACTION),
     (Role.READER, Action.USER_CREATE),
     (Role.READER, Action.USER_READ),
     (Role.READER, Action.SITE_READ),
@@ -125,7 +124,7 @@ group_role_table = Table('group_role', meta.metadata,
            Column('user_object_role_id', types.UnicodeText, ForeignKey('user_object_role.id'), primary_key=True),
            Column('group_id', types.UnicodeText, ForeignKey('group.id')),
            )
-           
+
 authorization_group_role_table = Table('authorization_group_role', meta.metadata,
            Column('user_object_role_id', types.UnicodeText, ForeignKey('user_object_role.id'), primary_key=True),
            Column('authorization_group_id', types.UnicodeText, ForeignKey('authorization_group.id')),
@@ -140,7 +139,7 @@ class RoleAction(domain_object.DomainObject):
     def __repr__(self):
         return '<%s role="%s" action="%s" context="%s">' % \
                (self.__class__.__name__, self.role, self.action, self.context)
-    
+
 
 # dictionary mapping protected objects (e.g. Package) to related ObjectRole
 protected_objects = {}
@@ -157,7 +156,7 @@ class UserObjectRole(domain_object.DomainObject):
             return '<%s authorized_group="%s" role="%s" context="%s">' % \
                 (self.__class__.__name__, self.authorized_group.name, self.role, self.context)
         else:
-            assert False, "UserObjectRole is neither for an authzgroup or for a user" 
+            assert False, "UserObjectRole is neither for an authzgroup or for a user"
 
     @classmethod
     def get_object_role_class(cls, domain_obj):
@@ -174,13 +173,7 @@ class UserObjectRole(domain_object.DomainObject):
         assert isinstance(user, _user.User), user
         q = cls._user_query(user, role, domain_obj)
         return q.count() == 1
-        
-    @classmethod
-    def authorization_group_has_role(cls, authorized_group, role, domain_obj):
-        assert isinstance(authorized_group, auth_group.AuthorizationGroup), authorized_group
-        q = cls._authorized_group_query(authorized_group, role, domain_obj)
-        return q.count() == 1
-        
+
     @classmethod
     def _user_query(cls, user, role, domain_obj):
         q = meta.Session.query(cls).filter_by(role=role)
@@ -189,16 +182,6 @@ class UserObjectRole(domain_object.DomainObject):
             # e.g. filter_by(package=domain_obj)
             q = q.filter_by(**dict({cls.name: domain_obj}))
         q = q.filter_by(user=user)
-        return q
-    
-    @classmethod
-    def _authorized_group_query(cls, authorized_group, role, domain_obj):
-        q = meta.Session.query(cls).filter_by(role=role)
-        # some protected objects are not "contextual"
-        if cls.name is not None:
-            # e.g. filter_by(package=domain_obj)
-            q = q.filter_by(**dict({cls.name: domain_obj}))
-        q = q.filter_by(authorized_group=authorized_group)
         return q
 
     @classmethod
@@ -217,35 +200,12 @@ class UserObjectRole(domain_object.DomainObject):
         if cls.name is not None:
             setattr(objectrole, cls.name, domain_obj)
         meta.Session.add(objectrole)
-         
-    @classmethod
-    def add_authorization_group_to_role(cls, authorization_group, role, domain_obj):
-        '''NB: Leaves the caller to commit the change. If called twice without a
-        commit, will add the role to the database twice. Since some other
-        functions count the number of occurrences, that leaves a fairly obvious
-        bug. But adding a commit here seems to break various tests.
-        So don\'t call this twice without committing, I guess...
-        '''
-        if cls.authorization_group_has_role(authorization_group, role, domain_obj):
-            return
-        objectrole = cls(role=role, authorized_group=authorization_group)
-        if cls.name is not None:
-            setattr(objectrole, cls.name, domain_obj)
-        meta.Session.add(objectrole)
 
     @classmethod
     def remove_user_from_role(cls, user, role, domain_obj):
         q = cls._user_query(user, role, domain_obj)
         for uo_role in q.all():
             meta.Session.delete(uo_role)
-        meta.Session.commit()
-        meta.Session.remove()
-
-    @classmethod
-    def remove_authorization_group_from_role(cls, authorization_group, role, domain_obj):
-        q = cls._authorized_group_query(authorization_group, role, domain_obj)
-        for ago_role in q.all():
-            meta.Session.delete(ago_role)
         meta.Session.commit()
         meta.Session.remove()
 
@@ -320,11 +280,11 @@ def remove_user_from_role(user, role, domain_obj):
     objectrole = UserObjectRole.get_object_role_class(domain_obj)
     objectrole.remove_user_from_role(user, role, domain_obj)
 
-    
+
 def authorization_group_has_role(authorization_group, role, domain_obj):
     objectrole = UserObjectRole.get_object_role_class(domain_obj)
     return objectrole.authorization_group_has_role(authorization_group, role, domain_obj)
-        
+
 def add_authorization_group_to_role(authorization_group, role, domain_obj):
     objectrole = UserObjectRole.get_object_role_class(domain_obj)
     objectrole.add_authorization_group_to_role(authorization_group, role, domain_obj)
@@ -332,12 +292,12 @@ def add_authorization_group_to_role(authorization_group, role, domain_obj):
 def remove_authorization_group_from_role(authorization_group, role, domain_obj):
     objectrole = UserObjectRole.get_object_role_class(domain_obj)
     objectrole.remove_authorization_group_from_role(authorization_group, role, domain_obj)
-    
+
 def init_authz_configuration_data():
     setup_default_user_roles(core.System())
     meta.Session.commit()
     meta.Session.remove()
-    
+
 def init_authz_const_data():
     '''Setup all default role-actions.
 
@@ -437,7 +397,7 @@ def get_default_user_roles(_domain_object):
     if not _default_user_roles_cache.has_key(_domain_object):
         _default_user_roles_cache[_domain_object] = _get_default_user_roles(_domain_object)
     return _default_user_roles_cache[_domain_object]
-        
+
 def setup_default_user_roles(_domain_object, admins=[]):
     ''' sets up roles for visitor, logged-in user and any admins provided
     @param admins - a list of User objects
@@ -468,7 +428,7 @@ def clear_user_roles(_domain_object):
 ## Mappers
 
 meta.mapper(RoleAction, role_action_table)
-       
+
 meta.mapper(UserObjectRole, user_object_role_table,
     polymorphic_on=user_object_role_table.c.context,
     polymorphic_identity=u'user_object',

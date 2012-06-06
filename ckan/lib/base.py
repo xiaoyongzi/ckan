@@ -454,12 +454,6 @@ class BaseController(WSGIController):
         elif 'add' in request.POST:
             user_or_authgroup = 'user'
             update_or_add = 'add'
-        elif 'authz_save' in request.POST:
-            user_or_authgroup = 'authorization_group'
-            update_or_add = 'update'
-        elif 'authz_add' in request.POST:
-            user_or_authgroup = 'authorization_group'
-            update_or_add = 'add'
         else:
             user_or_authgroup = None
             update_or_add = None
@@ -497,8 +491,7 @@ class BaseController(WSGIController):
             # Roles for this new user is a simple list from the checkbox row
             data_dict['roles'] = checked_roles
 
-            # User (or "user group" aka AuthorizationGroup) comes from
-            # the input box.
+            # User comes from the input box.
             new_user = request.params.get('new_user_name')
             if new_user:
                 data_dict[user_or_authgroup] = new_user
@@ -565,7 +558,6 @@ class BaseController(WSGIController):
         c.user_role_dict = user_role_dict
         c.authz_groups = authz_groups
         c.authz_groups_role_dict = authz_groups_role_dict
-        c.are_any_authz_groups = bool(model.Session.query(model.AuthorizationGroup).count())
 
 # Include the '_' function in the public names
 __all__ = [__name for __name in locals().keys() if not __name.startswith('_') \

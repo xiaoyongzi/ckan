@@ -89,20 +89,6 @@
     </py:for>
   </table>
 
-  <!--! List of authorization groups: pass in a collection of authorization groups and
-        this renders the standard group listing -->
-  <table class="table table-bordered table-striped table-condensed authorization_groups" py:def="authorization_group_list(authorization_groups)">
-      <tr><th>Title</th><th>Number of members</th></tr>
-      <py:for each="authorization_group in authorization_groups">
-      <tr>
-        <td><a href="${h.url_for(controller='authorization_group', action='read', id=authorization_group.name or authorization_group.id)}">
-            ${authorization_group.name or authorization_group.id}</a>
-        </td>
-        <td>${len(authorization_group.users)}</td>
-      </tr>
-      </py:for>
-    </table>
-
   <!--! Dataset openness icons -->
   <img py:def="package_license_icon(package)"
     src="${h.url_for('/images/icons/door_%s.png' % 'open' if package.isopen() else 'grey')}"

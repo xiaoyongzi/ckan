@@ -1,6 +1,6 @@
 import ckan.logic as logic
 from ckan.logic.auth import (get_package_object, get_resource_object,
-                            get_group_object, get_authorization_group_object,
+                            get_group_object,
                             get_user_object, get_resource_object, get_related_object)
 from ckan.logic.auth.create import _check_group_auth, package_relationship_create
 from ckan.authz import Authorizer
@@ -115,28 +115,6 @@ def group_edit_permissions(context, data_dict):
     authorized = logic.check_access_old(group, model.Action.EDIT_PERMISSIONS, context)
     if not authorized:
         return {'success': False, 'msg': _('User %s not authorized to edit permissions of group %s') % (str(user),group.id)}
-    else:
-        return {'success': True}
-
-def authorization_group_update(context, data_dict):
-    model = context['model']
-    user = context['user']
-    authorization_group = get_authorization_group_object(context, data_dict)
-
-    authorized = logic.check_access_old(authorization_group, model.Action.EDIT, context)
-    if not authorized:
-        return {'success': False, 'msg': _('User %s not authorized to edit permissions of authorization group %s') % (str(user),authorization_group.id)}
-    else:
-        return {'success': True}
-
-def authorization_group_edit_permissions(context, data_dict):
-    model = context['model']
-    user = context['user']
-    authorization_group = get_authorization_group_object(context, data_dict)
-
-    authorized = logic.check_access_old(authorization_group, model.Action.EDIT_PERMISSIONS, context)
-    if not authorized:
-        return {'success': False, 'msg': _('User %s not authorized to edit permissions of authorization group %s') % (str(user),authorization_group.id)}
     else:
         return {'success': True}
 

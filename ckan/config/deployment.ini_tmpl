@@ -92,7 +92,7 @@ ckan.build_search_index_synchronously = true
 
 ## Perform search just using database (rather than use e.g. solr).
 ## In this setup search is crude and limited .e.g no full-text search, no faceting ...
-## However, very useful for getting up and running quickly with CKAN 
+## However, very useful for getting up and running quickly with CKAN
 # ckan.simple_search = 1
 
 ## Title of site (using in several places including templates and <title> tag
@@ -102,9 +102,9 @@ ckan.site_title = CKAN
 ckan.site_logo = /img/logo_64px_wide.png
 
 ## Site tagline / description (used on front page)
-ckan.site_description = 
+ckan.site_description =
 
-## Used in creating some absolute urls (such as rss feeds, css files) and 
+## Used in creating some absolute urls (such as rss feeds, css files) and
 ## dump filenames
 ckan.site_url =
 
@@ -119,7 +119,7 @@ ckan.gravatar_default = identicon
 ## Solr support
 #solr_url = http://127.0.0.1:8983/solr
 
-## An 'id' for the site (using, for example, when creating entries in a common search index) 
+## An 'id' for the site (using, for example, when creating entries in a common search index)
 ## If not specified derived from the site_url
 # ckan.site_id = ckan.net
 
@@ -130,15 +130,15 @@ ckan.gravatar_default = identicon
 ## html content to be inserted just before </head> tag (e.g. extra stylesheet)
 ## NB: can use html e.g. <strong>blah</strong>
 ## NB: can have multiline strings just indent following lines
-# ckan.template_head_end = <link rel="stylesheet" href="http://mysite.org/css/custom.css" type="text/css"> 
+# ckan.template_head_end = <link rel="stylesheet" href="http://mysite.org/css/custom.css" type="text/css">
 
 ## html content to be inserted just before </body> tag (e.g. google analytics code)
 ## NB: can use html e.g. <strong>blah</strong>
 ## NB: can have multiline strings just indent following lines
-# ckan.template_footer_end = 
+# ckan.template_footer_end =
 
 # These three settings (ckan.log_dir, ckan.dump_dir and ckan.backup_dir) are
-# all used in cron jobs, not in CKAN itself. CKAN logging is configured 
+# all used in cron jobs, not in CKAN itself. CKAN logging is configured
 # in the logging configuration below
 # Directory for logs (produced by cron scripts associated with ckan)
 ckan.log_dir = %(here)s/log
@@ -151,15 +151,14 @@ ckan.backup_dir = %(here)s/backup
 #ckan.default_roles.Package = {"visitor": ["editor"], "logged_in": ["editor"]}
 #ckan.default_roles.Group = {"visitor": ["reader"], "logged_in": ["reader"]}
 #ckan.default_roles.System = {"visitor": ["anon_editor"], "logged_in": ["editor"]}
-#ckan.default_roles.AuthorizationGroup = {"visitor": ["reader"], "logged_in": ["reader"]}
 
 ## Ckan public and private recaptcha keys [localhost]
-#ckan.recaptcha.publickey = 
-#ckan.recaptcha.privatekey = 
+#ckan.recaptcha.publickey =
+#ckan.recaptcha.privatekey =
 
 # Locale/languages
 ckan.locale_default = en
-#ckan.locales_offered = 
+#ckan.locales_offered =
 # Default order is roughly by number of people speaking it in Europe:
 # http://en.wikipedia.org/wiki/Languages_of_the_European_Union#Knowledge
 ckan.locale_order = en de fr it es pl ru nl sv no cs_CZ hu pt_BR fi bg ca sq sr sr_Latn

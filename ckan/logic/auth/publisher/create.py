@@ -93,10 +93,6 @@ def group_create(context, data_dict=None):
     else:
         return {'success': True}
 
-def authorization_group_create(context, data_dict=None):
-    return {'success': False, 'msg': _('Authorization groups not implemented in this profile') % str(user)}
-
-
 def rating_create(context, data_dict):
     # No authz check in the logic function
     return {'success': True}

@@ -448,19 +448,6 @@ def linked_user(user, maxlength=0):
         return _icon + link_to(displayname,
                        url_for(controller='user', action='read', id=_name))
 
-def linked_authorization_group(authgroup, maxlength=0):
-    if not isinstance(authgroup, model.AuthorizationGroup):
-        authgroup_name = unicode(authgroup)
-        authgroup = model.AuthorizationGroup.get(authgroup_name)
-        if not authgroup:
-            return authgroup_name
-    if authgroup:
-        displayname = authgroup.name or authgroup.id
-        if maxlength and len(display_name) > maxlength:
-            displayname = displayname[:maxlength] + '...'
-        return link_to(displayname,
-                       url_for(controller='authorization_group', action='read', id=displayname))
-
 def group_name_to_title(name):
     group = model.Group.by_name(name)
     if group is not None:
@@ -634,7 +621,7 @@ def parse_rfc_2822_date(date_str, assume_utc=True):
 
     RFC 2822 is the date format used in HTTP headers.  It should contain timezone
     information, but that cannot be relied upon.
-    
+
     If date_str doesn't contain timezone information, then the 'assume_utc' flag
     determines whether we assume this string is local (with respect to the
     server running this code), or UTC.  In practice, what this means is that if
@@ -643,7 +630,7 @@ def parse_rfc_2822_date(date_str, assume_utc=True):
 
     If timezone information is available in date_str, then the returned datetime
     is 'aware', ie - it has an associated tz_info object.
-    
+
     Returns None if the string cannot be parsed as a valid datetime.
     """
     time_tuple = email.utils.parsedate_tz(date_str)
@@ -845,7 +832,6 @@ __allowed_functions__ = [
          #  am_authorized, # deprecated
            'check_access',
            'linked_user',
-           'linked_authorization_group',
            'group_name_to_title',
            'markdown_extract',
            'icon',

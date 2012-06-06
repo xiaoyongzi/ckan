@@ -386,7 +386,8 @@ class TestRoles:
                 pretty_role = '"%s" is "%s" on "%s"' % (
                     pretty_role.get('user') or pretty_role.get('authorized_group'),
                     pretty_role['role'],
-                    pretty_role.get('package') or pretty_role.get('group') or pretty_role.get('authorization_group') or pretty_role.get('context'))
+                    pretty_role.get('package') or pretty_role.get('group') or\
+                        pretty_role.get('context'))
             pretty_roles.append(pretty_role)
         return pretty_roles
 
