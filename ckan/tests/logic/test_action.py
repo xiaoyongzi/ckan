@@ -838,24 +838,6 @@ class TestAction(WsgiAppCase):
         assert set(roles[0].keys()) > set(('user_id', 'package_id', 'role',
                                            'context', 'user_object_role_id'))
 
-    def test_34_roles_show_for_authgroup_on_authgroup(self):
-        anna = model.Package.by_name(u'annakarenina')
-        annafan = model.User.by_name(u'annafan')
-        authgroup = model.AuthorizationGroup.by_name(u'anauthzgroup')
-        authgroup2 = model.AuthorizationGroup.by_name(u'anotherauthzgroup')
-        
-        model.add_authorization_group_to_role(authgroup2, 'editor', authgroup)
-        model.repo.commit_and_remove()
-        
-        postparams = '%s=1' % json.dumps({'domain_object': authgroup.id,
-                                          'authorization_group': authgroup2.id})
-        res = self.app.post('/api/action/roles_show', params=postparams,
-                            extra_environ={'Authorization': str(annafan.apikey)},
-                            status=200)
-        
-        authgroup_roles = TestRoles.get_roles(authgroup.id, authgroup_ref=authgroup2.name)
-        assert_equal(authgroup_roles, ['"anotherauthzgroup" is "editor" on "anauthzgroup"'])
-
     def test_35_user_role_update(self):
         anna = model.Package.by_name(u'annakarenina')
         annafan = model.User.by_name(u'annafan')
@@ -877,46 +859,11 @@ class TestAction(WsgiAppCase):
         assert_equal(results['roles'][0]['role'], 'reader')
         assert_equal(results['roles'][0]['package_id'], anna.id)
         assert_equal(results['roles'][0]['user_id'], tester.id)
-        
+
         roles_after = get_action('roles_show') \
                       ({'model': model, 'session': model.Session}, \
                        {'domain_object': anna.id,
                         'user': 'tester'})
-        assert_equal(results['roles'], roles_after['roles'])
-
-    def test_36_user_role_update_for_auth_group(self):
-        anna = model.Package.by_name(u'annakarenina')
-        annafan = model.User.by_name(u'annafan')
-        authgroup = model.AuthorizationGroup.by_name(u'anauthzgroup')
-        all_roles_before = TestRoles.get_roles(anna.id)
-        authgroup_roles_before = TestRoles.get_roles(anna.id, authgroup_ref=authgroup.name)
-        assert_equal(len(authgroup_roles_before), 0)
-        postparams = '%s=1' % json.dumps({'authorization_group': authgroup.name,
-                                          'domain_object': anna.id,
-                                          'roles': ['editor']})
-
-        res = self.app.post('/api/action/user_role_update', params=postparams,
-                            extra_environ={'Authorization': str(annafan.apikey)},
-                            status=200)
-
-        results = json.loads(res.body)['result']
-        assert_equal(len(results['roles']), 1)
-        anna = model.Package.by_name(u'annakarenina')
-        authgroup = model.AuthorizationGroup.by_name(u'anauthzgroup')
-
-        assert_equal(results['roles'][0]['role'], 'editor')
-        assert_equal(results['roles'][0]['package_id'], anna.id)
-        assert_equal(results['roles'][0]['authorized_group_id'], authgroup.id)
-        
-        all_roles_after = TestRoles.get_roles(anna.id)
-        authgroup_roles_after = TestRoles.get_roles(anna.id, authgroup_ref=authgroup.name)
-        assert_equal(set(all_roles_before) ^ set(all_roles_after),
-                     set([u'"anauthzgroup" is "editor" on "annakarenina"']))
-        
-        roles_after = get_action('roles_show') \
-                      ({'model': model, 'session': model.Session}, \
-                       {'domain_object': anna.id,
-                        'authorization_group': authgroup.name})
         assert_equal(results['roles'], roles_after['roles'])
 
     def test_37_user_role_update_disallowed(self):
@@ -1213,7 +1160,7 @@ class MockPackageSearchPlugin(SingletonPlugin):
         return search_results
 
     def before_view(self, data_dict):
-        
+
         data_dict['title'] = 'string_not_found_in_rest_of_template'
 
         return data_dict
@@ -1279,7 +1226,7 @@ class TestSearchPluginInterface(WsgiAppCase):
         res = self.app.post('/api/action/package_search', params=search_params)
 
         res_dict = json.loads(res.body)['result']
-        assert res_dict['count'] == 0 
+        assert res_dict['count'] == 0
         assert len(res_dict['results']) == 0
 
         # all datasets should get abcabcabc
@@ -1296,8 +1243,8 @@ class TestSearchPluginInterface(WsgiAppCase):
         res = self.app.get('/dataset/annakarenina')
 
         assert 'string_not_found_in_rest_of_template' in res.body
-        
+
         res = self.app.get('/dataset?q=')
         assert res.body.count('string_not_found_in_rest_of_template') == 2
-        
+
 

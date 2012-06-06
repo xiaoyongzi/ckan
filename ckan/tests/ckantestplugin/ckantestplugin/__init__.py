@@ -44,7 +44,7 @@ class AuthorizerPlugin(SingletonPlugin):
     implements(IAuthorizer, inherit=True)
 
     def get_authorization_groups(self, username):
-        return [model.AuthorizationGroup(name=u'authz_plugin_group')]
+        return []
 
     def get_roles(self, username, domain_obj):
         return [model.authz.Role.ADMIN]
