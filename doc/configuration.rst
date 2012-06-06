@@ -594,7 +594,7 @@ Authorization Settings
 default_roles
 ^^^^^^^^^^^^^
 
-This allows you to set the default authorization roles (i.e. permissions) for new objects. Currently this extends to new datasets, groups, authorization groups and the ``system`` object. For full details of these, see :doc:`authorization`.
+This allows you to set the default authorization roles (i.e. permissions) for new objects. Currently this extends to new datasets, groups and the ``system`` object. For full details of these, see :doc:`authorization`.
 
 The value is a strict JSON dictionary of user names ``visitor`` (any user who is not logged in)  and ``logged_in`` (any user who is logged in) with lists of their roles.
 

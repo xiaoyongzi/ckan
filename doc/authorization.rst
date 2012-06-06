@@ -31,12 +31,11 @@ Objects
 +++++++
 
 Permissions are controlled per object: access can be controlled for an individual
-dataset, group or authorization group instance. Current objects include
-**datasets**, dataset **groups**, **authorization groups** and the **system**.
+dataset or group instance. Current objects include **datasets**, dataset **groups**
+and the **system**.
 
 * A dataset is the basic CKAN concept of metadata about a dataset.
 * A group of datasets can be set up to specify which users have permission to add or remove datasets from the group.
-* Users can be assigned to authorization groups, to increase flexibility. Instead of specifying the privileges of specific users on a dataset or group, you can also specify a set of users that share the same rights. To do that, an authorization group can be set up and users can be added to it. Authorization groups are both the object of authorization (i.e. one can have several roles with regards to an authorization group, such as being allowed to read or edit it) and the subject of authorization (i.e. they can be assigned roles on other objects which will apply to their members, such as the group having edit rights on a particular group).
 * Finally, the system object is special, serving as an object for assignments that do not relate to a specific object. For example, creating a dataset cannot be linked to a specific dataset instance, and is therefore a operation.
 
 
@@ -52,7 +51,6 @@ The **read-site** action (associated with the system object) allows or denies ac
  * Dataset search
  * Group index
  * Tags index
- * Authorization Group index
  * All requests to the API (on top of any other authorization requirements)
 
 There are also some shortcuts that are provided directly by the authorization
@@ -108,10 +106,10 @@ These defaults can be changed in the CKAN config - see ``default_roles`` in :doc
 Managing Permissions
 --------------------
 
-The assignment of users and authorization groups to roles on a given
-protected object (such as a dataset) can be done by 'admins' via the
-'authorization' tab of the web interface (or by sysadmins via that
-interface or the system admin interface).
+The assignment of users to roles on a given protected object (such as
+a dataset) can be done by 'admins' via the 'authorization' tab of the
+web interface (or by sysadmins via that interface or the system admin
+interface).
 
 There is also a command-line authorization manager, detailed below.
 
@@ -134,16 +132,11 @@ The ``rights make`` command lets you assign specific permissions. For example, t
     paster --plugin=ckan rights -c my.ini make bar admin dataset:foo
 
 As well as users and datasets, you can assign rights to other objects. These
-include authorization groups, dataset groups and the system as a whole.
+include dataset groups and the system as a whole.
 
 For example, to make the user 'chef' a system-wide admin::
 
     paster --plugin=ckan rights -c my.ini make chef admin system
-
-Or to allow all members of authorization group 'foo' to edit group 'bar'::
-
-    paster --plugin=ckan rights -c my.ini make agroup:foo edit \
-        group:bar
 
 To revoke one of the roles assigned using ``rights make``, the ``rights remove`` command
 is available. For example, to remove **bar**'s **admin** role on the foo dataset::
@@ -206,7 +199,6 @@ To operate in this mode:
      ckan.default_roles.Package = {"visitor": ["reader"], "logged_in": ["editor"]}
      ckan.default_roles.Group = {"visitor": ["reader"], "logged_in": ["editor"]}
      ckan.default_roles.System = {"visitor": ["reader"], "logged_in": ["editor"]}
-     ckan.default_roles.AuthorizationGroup = {"visitor": ["reader"], "logged_in": ["editor"]}
 
 
 3. Publisher Mode
@@ -237,6 +229,4 @@ To operate in this mode:
      ckan.default_roles.Package = {"visitor": ["reader"], "logged_in": ["reader"]}
      ckan.default_roles.Group = {"visitor": ["reader"], "logged_in": ["reader"]}
      ckan.default_roles.System = {"visitor": ["reader"], "logged_in": ["reader"]}
-     ckan.default_roles.AuthorizationGroup = {"visitor": ["reader"], "logged_in": ["reader"]}
 
-Note you can also restrict dataset edits by a user's authorization group.

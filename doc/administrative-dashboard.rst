@@ -14,7 +14,7 @@ The dashboard is located, relative to your site root, at ``/ckan-admin/``.
 .. note:: To create your first sysadmin you cannot use Dashboard as you will
           not yet have access! Instead create a sysadmin using the command line
           ``paster`` by running the following command::
-          
+
             paster sysadmin -h
 
 Setting System-Level Roles
@@ -22,9 +22,9 @@ Setting System-Level Roles
 
 Authorization interface is located at: ``/ckan-admin/authz``
 
-This page allows you to see and change the users and authorization groups who
-have 'roles' on the 'System Object'. In a standard installation, there are four
-'roles' which a user can have on the System (or on any object):
+This page allows you to see and change the users who have 'roles' on the
+'System Object'. In a standard installation, there are four 'roles' which
+a user can have on the System (or on any object):
 
 * admin (administrator)
 
@@ -42,7 +42,7 @@ have 'roles' on the 'System Object'. In a standard installation, there are four
     create an account, so they're locked out forever unless they already
     have a valid account.
 
-* editor (Update action allowed) 
+* editor (Update action allowed)
 * anon-editor
 
 .. note:: these roles can be applied to users on your system as well as to
