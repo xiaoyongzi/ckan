@@ -47,6 +47,7 @@ class _Toolkit(object):
         'NotAuthorized',        # action not authorized exception
         'ValidationError',      # model update validation error
         'CkanCommand',          # class for providing cli interfaces
+        'url_for',              # helper for building urls
 
         ## Fully defined in this file ##
         'add_template_directory',
@@ -65,6 +66,7 @@ class _Toolkit(object):
 
         import ckan
         import ckan.lib.base as base
+        import ckan.lib.helpers as h
         import ckan.logic as logic
         import ckan.lib.cli as cli
 
@@ -84,6 +86,7 @@ class _Toolkit(object):
         t['asint'] = converters.asint
         t['aslist'] = converters.aslist
         t['literal'] = webhelpers.html.tags.literal
+        t['url_for'] = h.url_for
 
         t['get_action'] = logic.get_action
         t['check_access'] = logic.check_access
