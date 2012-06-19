@@ -1,6 +1,7 @@
 import ckan.plugins as p
-from ckan.lib.base import BaseController, config
+from ckan.lib.base import BaseController
 import stats as stats_lib
+import ckanext.stats.plugin as plugin
 
 class StatsController(BaseController):
 
@@ -21,7 +22,7 @@ class StatsController(BaseController):
 
     def leaderboard(self, id=None):
         c = p.toolkit.c
-        c.solr_core_url = config.get('ckanext.stats.solr_core_url',
+        c.solr_core_url = plugin.stored_config.get('ckanext.stats.solr_core_url',
                 'http://solr.okfn.org/solr/ckan')
         return p.toolkit.render('ckanext/stats/leaderboard.html')
 

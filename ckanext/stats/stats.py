@@ -1,18 +1,18 @@
 import datetime
 
-from pylons import config
 import sqlalchemy as sa
 
-import ckan.plugins as p
 from ckan import model
 
-cache_enabled = p.toolkit.asbool(config.get('ckanext.stats.cache_enabled', 'True'))
-
-if cache_enabled:
-    from pylons import cache
-    our_cache = cache.get_cache('stats', type='dbm')
+import ckanext.stats.plugin as plugin
 
 DATE_FORMAT = '%Y-%m-%d'
+
+if plugin.cache_enabled:
+    from pylons import cache
+    our_cache = cache.get_cache('stats', type='dbm')
+else:
+    our_cache = None
 
 def table(name):
     return sa.Table(name, model.meta.metadata, autoload=True)
@@ -172,7 +172,7 @@ class RevisionStats(object):
             for pkg_id, created_datetime in res:
                 res_pickleable.append((pkg_id, created_datetime.toordinal()))
             return res_pickleable
-        if cache_enabled:
+        if our_cache:
             week_commences = cls.get_date_week_started(datetime.date.today())
             key = 'all_new_packages_%s' + week_commences.strftime(DATE_FORMAT)
             new_packages = our_cache.get_value(key=key,
@@ -201,7 +201,7 @@ class RevisionStats(object):
             for pkg_id, deleted_datetime in res:
                 res_pickleable.append((pkg_id, deleted_datetime.toordinal()))
             return res_pickleable
-        if cache_enabled:
+        if our_cache:
             week_commences = cls.get_date_week_started(datetime.date.today())
             key = 'all_deleted_packages_%s' + week_commences.strftime(DATE_FORMAT)
             deleted_packages = our_cache.get_value(key=key,
@@ -250,7 +250,7 @@ class RevisionStats(object):
             assert new_package_week_index == len(new_packages_by_week)
             assert deleted_package_week_index == len(deleted_packages_by_week)
             return weekly_numbers
-        if cache_enabled:
+        if our_cache:
             week_commences = cls.get_date_week_started(datetime.date.today())
             key = 'number_packages_%s' + week_commences.strftime(DATE_FORMAT)
             num_packages = our_cache.get_value(key=key,
@@ -304,7 +304,7 @@ class RevisionStats(object):
                 week_ends = week_commences + datetime.timedelta(days=7)
                 weekly_pkg_ids.append(build_weekly_stats(week_commences, []))
             return weekly_pkg_ids
-        if cache_enabled:
+        if our_cache:
             week_commences = cls.get_date_week_started(datetime.date.today())
             key = '%s_by_week_%s' % (cls._object_type, week_commences.strftime(DATE_FORMAT))
             objects_by_week_ = our_cache.get_value(key=key,
