@@ -1,7 +1,7 @@
 from paste.deploy import appconfig
 import paste.fixture
 from ckan.config.middleware import make_app
-from ckan.tests import conf_dir, url_for
+from ckan.tests import conf_dir
 
 class StatsFixture(object):
 
