@@ -3,6 +3,7 @@ import datetime
 import sqlalchemy as sa
 
 from ckan import model
+import ckan.plugins as p
 
 import ckanext.stats.plugin as plugin
 
@@ -32,8 +33,8 @@ class Stats(object):
               group_by(package.c.id).\
               order_by(sa.func.avg(rating.c.rating).desc(), sa.func.count(rating.c.rating).desc()).\
               limit(limit)
-        res_ids = model.Session.execute(sql).fetchall()
-        res_pkgs = [(model.Session.query(model.Package).get(unicode(pkg_id)), avg, num) for pkg_id, avg, num in res_ids]
+        res_ids = p.toolkit.ckan_session.execute(sql).fetchall()
+        res_pkgs = [(p.toolkit.ckan_session.query(model.Package).get(unicode(pkg_id)), avg, num) for pkg_id, avg, num in res_ids]
         return res_pkgs
 
     @classmethod
@@ -43,8 +44,8 @@ class Stats(object):
             group_by(package_revision.c.id).\
             order_by(sa.func.count(package_revision.c.revision_id).desc()).\
             limit(limit)
-        res_ids = model.Session.execute(s).fetchall()
-        res_pkgs = [(model.Session.query(model.Package).get(unicode(pkg_id)), val) for pkg_id, val in res_ids]
+        res_ids = p.toolkit.ckan_session.execute(s).fetchall()
+        res_pkgs = [(p.toolkit.ckan_session.query(model.Package).get(unicode(pkg_id)), val) for pkg_id, val in res_ids]
         return res_pkgs
 
     @classmethod
@@ -56,8 +57,8 @@ class Stats(object):
             order_by(sa.func.count(member.c.table_id).desc()).\
             limit(limit)
 
-        res_ids = model.Session.execute(s).fetchall()
-        res_groups = [(model.Session.query(model.Group).get(unicode(group_id)), val) for group_id, val in res_ids]
+        res_ids = p.toolkit.ckan_session.execute(s).fetchall()
+        res_groups = [(p.toolkit.ckan_session.query(model.Group).get(unicode(group_id)), val) for group_id, val in res_ids]
         return res_groups
 
     @classmethod
@@ -77,11 +78,11 @@ class Stats(object):
         s = s.group_by(tag_column).\
             order_by(sa.func.count(package_tag.c.package_id).desc()).\
             limit(limit)
-        res_col = model.Session.execute(s).fetchall()
+        res_col = p.toolkit.ckan_session.execute(s).fetchall()
         if returned_tag_info in ('id', 'name'):
             return res_col
         elif returned_tag_info == 'object':
-            res_tags = [(model.Session.query(model.Tag).get(unicode(tag_id)), val) for tag_id, val in res_col]
+            res_tags = [(p.toolkit.ckan_session.query(model.Tag).get(unicode(tag_id)), val) for tag_id, val in res_col]
             return res_tags
 
     @classmethod
@@ -94,8 +95,8 @@ class Stats(object):
             group_by(user_object_role.c.user_id).\
             order_by(sa.func.count(user_object_role.c.role).desc()).\
             limit(limit)
-        res_ids = model.Session.execute(s).fetchall()
-        res_users = [(model.Session.query(model.User).get(unicode(user_id)), val) for user_id, val in res_ids]
+        res_ids = p.toolkit.ckan_session.execute(s).fetchall()
+        res_users = [(p.toolkit.ckan_session.query(model.User).get(unicode(user_id)), val) for user_id, val in res_ids]
         return res_users
 
 class RevisionStats(object):
@@ -152,7 +153,7 @@ class RevisionStats(object):
         package_revision = table('package_revision')
         revision = table('revision')
         s = sa.select([package_revision.c.id, revision.c.timestamp], from_obj=[package_revision.join(revision)]).order_by(revision.c.timestamp)
-        res = model.Session.execute(s).fetchall() # [(id, datetime), ...]
+        res = p.toolkit.ckan_session.execute(s).fetchall() # [(id, datetime), ...]
         return res
 
     @classmethod
@@ -167,7 +168,7 @@ class RevisionStats(object):
             package_revision = table('package_revision')
             revision = table('revision')
             s = sa.select([package_revision.c.id, sa.func.min(revision.c.timestamp)], from_obj=[package_revision.join(revision)]).group_by(package_revision.c.id).order_by(sa.func.min(revision.c.timestamp))
-            res = model.Session.execute(s).fetchall() # [(id, datetime), ...]
+            res = p.toolkit.ckan_session.execute(s).fetchall() # [(id, datetime), ...]
             res_pickleable = []
             for pkg_id, created_datetime in res:
                 res_pickleable.append((pkg_id, created_datetime.toordinal()))
@@ -196,7 +197,7 @@ class RevisionStats(object):
                 where(package_revision.c.state==model.State.DELETED).\
                 group_by(package_revision.c.id).\
                 order_by(sa.func.min(revision.c.timestamp))
-            res = model.Session.execute(s).fetchall() # [(id, datetime), ...]
+            res = p.toolkit.ckan_session.execute(s).fetchall() # [(id, datetime), ...]
             res_pickleable = []
             for pkg_id, deleted_datetime in res:
                 res_pickleable.append((pkg_id, deleted_datetime.toordinal()))
@@ -222,8 +223,8 @@ class RevisionStats(object):
             deleted_pkgs = []
             def build_weekly_stats(week_commences, new_pkg_ids, deleted_pkg_ids):
                 num_pkgs = len(new_pkg_ids) - len(deleted_pkg_ids)
-                new_pkgs.extend([model.Session.query(model.Package).get(id).name for id in new_pkg_ids])
-                deleted_pkgs.extend([model.Session.query(model.Package).get(id).name for id in deleted_pkg_ids])
+                new_pkgs.extend([p.toolkit.ckan_session.query(model.Package).get(id).name for id in new_pkg_ids])
+                deleted_pkgs.extend([p.toolkit.ckan_session.query(model.Package).get(id).name for id in deleted_pkg_ids])
                 cls._cumulative_num_pkgs += num_pkgs
                 return (week_commences.strftime(DATE_FORMAT),
                         num_pkgs, cls._cumulative_num_pkgs)
@@ -349,5 +350,5 @@ class RevisionStats(object):
         if type_ in ('package_revision_rate', 'package_addition_rate'):
             return len(object_ids)
         elif type_ in ('new_packages', 'deleted_packages'):
-            return [ model.Session.query(model.Package).get(pkg_id) \
+            return [ p.toolkit.ckan_session.query(model.Package).get(pkg_id) \
                      for pkg_id in object_ids ]

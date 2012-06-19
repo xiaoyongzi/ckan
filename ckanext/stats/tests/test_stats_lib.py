@@ -1,6 +1,7 @@
 import datetime
 from nose.tools import assert_equal
 
+import ckan.plugins as p
 from ckan.lib.create_test_data import CreateTestData
 from ckan import model
 
@@ -23,7 +24,7 @@ class TestStatsPlugin(StatsFixture):
             )
         # hack revision timestamps to be this date
         week1 = datetime.datetime(2011, 1, 5)
-        for rev in model.Session.query(model.Revision):
+        for rev in p.toolkit.ckan_session.query(model.Revision):
             rev.timestamp = week1 + datetime.timedelta(seconds=1)
 
         # week 2
@@ -85,7 +86,7 @@ class TestStatsPlugin(StatsFixture):
         new_packages_by_week = RevisionStats.get_by_week('new_packages')
         def get_results(week_number):
             date, ids, num, cumulative = new_packages_by_week[week_number]
-            return (date, set([model.Session.query(model.Package).get(id).name for id in ids]), num, cumulative)
+            return (date, set([p.toolkit.ckan_session.query(model.Package).get(id).name for id in ids]), num, cumulative)
         assert_equal(get_results(0),
                      ('2011-01-03', set((u'test1', u'test2', u'test3', u'test4')), 4, 4))
         assert_equal(get_results(1),
@@ -99,7 +100,7 @@ class TestStatsPlugin(StatsFixture):
         deleted_packages_by_week = RevisionStats.get_by_week('deleted_packages')
         def get_results(week_number):
             date, ids, num, cumulative = deleted_packages_by_week[week_number]
-            return (date, [model.Session.query(model.Package).get(id).name for id in ids], num, cumulative)
+            return (date, [p.toolkit.ckan_session.query(model.Package).get(id).name for id in ids], num, cumulative)
         assert_equal(get_results(0),
                      ('2011-01-10', [u'test2'], 1, 1))
         assert_equal(get_results(1),

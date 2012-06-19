@@ -48,6 +48,7 @@ class _Toolkit(object):
         'ValidationError',      # model update validation error
         'CkanCommand',          # class for providing cli interfaces
         'url_for',              # helper for building urls
+        'ckan_session',         # the sqlalchemy session object
 
         ## Fully defined in this file ##
         'add_template_directory',
@@ -69,6 +70,7 @@ class _Toolkit(object):
         import ckan.lib.helpers as h
         import ckan.logic as logic
         import ckan.lib.cli as cli
+        import ckan.model as model
 
         # Allow class access to these modules
         self.__class__.ckan = ckan
@@ -95,6 +97,7 @@ class _Toolkit(object):
         t['ValidationError'] = logic.ValidationError
 
         t['CkanCommand'] = cli.CkanCommand
+        t['ckan_session'] = model.Session
 
         # class functions
         t['render_snippet'] = self._render_snippet
