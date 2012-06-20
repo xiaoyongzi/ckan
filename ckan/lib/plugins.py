@@ -272,8 +272,6 @@ class DefaultDatasetForm(object):
         c.groups_available = authz_fn(context, data_dict)
 
         c.licences = [('', '')] + base.model.Package.get_license_options()
-        # this is a hack to fix #2575 but needs sorting properly
-        c.licences[1] = (base._("License Not Specified"), c.licences[1][1])
         c.is_sysadmin = authz.Authorizer().is_sysadmin(c.user)
 
         if c.pkg:
