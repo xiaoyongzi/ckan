@@ -34,9 +34,11 @@ class ActionError(Exception):
         return ' - '.join([str(err_msg) for err_msg in err_msgs if err_msg])
 
 class NotFound(ActionError):
+    ''' Exception raised when an object cannot be found. '''
     pass
 
 class NotAuthorized(ActionError):
+    ''' Exception raised when an action is not permitted by a user. '''
     pass
 
 class ParameterError(ActionError):
@@ -44,6 +46,8 @@ class ParameterError(ActionError):
 
 
 class ValidationError(ParameterError):
+    ''' Exception raised when supplied data is invalid.
+    it contains details of the error that occurred. '''
     def __init__(self, error_dict, error_summary=None, extra_msg=None):
         self.error_dict = error_dict
         self.error_summary = error_summary
@@ -144,6 +148,9 @@ def flatten_to_string_key(dict):
     return untuplize_dict(flattented)
 
 def check_access(action, context, data_dict=None):
+    ''' check that the named action with the included context and
+    optional data dict is allowed raises NotAuthorized if the action is
+    not permitted or True. '''
     model = context['model']
     user = context.get('user')
 
@@ -194,6 +201,7 @@ def check_access_old(entity, action, context):
 _actions = {}
 
 def get_action(action):
+    ''' Get the requested action function. '''
     if _actions:
         return _actions.get(action)
     # Otherwise look in all the plugins to resolve all possible

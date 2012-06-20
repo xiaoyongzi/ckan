@@ -26,6 +26,7 @@ class MockTranslator(object):
         return singular
 
 class CkanCommand(paste.script.command.Command):
+    ''' Base class for building paster functions. '''
     parser = paste.script.command.Command.standard_parser(verbose=True)
     parser.add_option('-c', '--config', dest='config',
             default='development.ini', help='Config file to use.')
@@ -1002,11 +1003,15 @@ class PluginInfo(CkanCommand):
 
     summary = __doc__.split('\n')[0]
     usage = __doc__
-    max_args = 0
+    max_args = 1
     min_args = 0
 
     def command(self):
-        self.get_info()
+        if self.args:
+            if self.args[0] == 'toolkit':
+                self.toolkit()
+        else:
+            self.get_info()
 
     def get_info(self):
         ''' print info about current plugins from the .ini file'''
@@ -1032,22 +1037,30 @@ class PluginInfo(CkanCommand):
                 plugins[name]['implements'].append(interface.__name__)
 
         for plugin in plugins:
-            p = plugins[plugin]
+            plugin_ = plugins[plugin]
             print plugin + ':'
             print '-' * (len(plugin) + 1)
-            if p['doc']:
-                print p['doc']
+            if plugin_['doc']:
+                print plugin_['doc']
             print 'Implements:'
-            for i in p['implements']:
+            for i in plugin_['implements']:
                 extra = None
                 if i == 'ITemplateHelpers':
-                    extra = self.template_helpers(p['class'])
+                    extra = self.template_helpers(plugin_['class'])
                 if i == 'IActions':
-                    extra = self.actions(p['class'])
+                    extra = self.actions(plugin_['class'])
                 print '    %s' % i
                 if extra:
                     print extra
             print
+
+    def toolkit(self):
+        ''' print info about plugins.toolkit for documentation '''
+        import ckan.plugins as p
+        path = os.path.join(os.path.dirname(__file__), '../docs/toolkit.rst')
+        f = open(path, 'w')
+        f.write(p.toolkit._document())
+        f.close()
 
 
     def actions(self, cls):

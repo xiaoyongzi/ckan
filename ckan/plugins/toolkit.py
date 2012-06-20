@@ -170,6 +170,7 @@ class _Toolkit(object):
     @classmethod
     def _requires_ckan_version(cls, min_version, max_version=None):
         ''' Check that the ckan version is correct for the plugin. '''
+
         if not cls._check_ckan_version(min_version=min_version,
                                        max_version=max_version):
             if not max_version:
@@ -189,6 +190,56 @@ class _Toolkit(object):
             if name == '__bases__':
                 return self.__class__.__bases__
             raise Exception('`%s` not found in plugins toolkit' % name)
+
+    def _function_info(self, functions):
+        ''' Take a dict of functions and output readable info '''
+        import inspect
+        output = []
+        for function_name in sorted(functions):
+            fn = functions[function_name]
+            if inspect.isclass(fn) and not inspect.ismethod(fn):
+                output.append('Class %s' % function_name)
+                if fn.__doc__:
+                    bits = fn.__doc__.split('\n')
+                    for bit in bits:
+                        output.append('  %s' % bit.strip())
+                else:
+                    output.append('  NO DOCSTRING PRESENT')
+                output.append('\n')
+                continue
+            args_info = inspect.getargspec(fn)
+            params = args_info.args
+            num_params = len(params)
+            if args_info.varargs:
+                params.append('*' + args_info.varargs)
+            if args_info.keywords:
+                params.append('**' + args_info.keywords)
+            if args_info.defaults:
+                offset = num_params - len(args_info.defaults)
+                for i, v in enumerate(args_info.defaults):
+                    params[i + offset] = params[i + offset] + '=' + repr(v)
+            # is this a classmethod if so remove the first parameter
+            if inspect.ismethod(fn) and inspect.isclass(fn.__self__):
+                params = params[1:]
+            params = ', '.join(params)
+            output.append('%s(%s)' % (function_name, params))
+            # doc string
+            if fn.__doc__:
+                bits = fn.__doc__.split('\n')
+                for bit in bits:
+                    output.append('  %s' % bit.strip())
+            else:
+                output.append('  NO DOCSTRING PRESENT')
+            output.append('\n')
+        return ('\n').join(output)
+    def _document(self):
+        out = 'Toolkit:\n--------\n\n'
+        functions = {}
+        import copy
+        functions = copy.copy(self._toolkit)
+        del functions['c']
+        del functions['request']
+        return out + self._function_info(functions)
 
 toolkit = _Toolkit()
 del _Toolkit
