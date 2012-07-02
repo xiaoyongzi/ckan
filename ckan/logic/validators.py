@@ -101,6 +101,17 @@ def user_id_exists(user_id, context):
         raise Invalid('%s: %s' % (_('Not found'), _('User')))
     return user_id
 
+def user_id_or_name_exists(user_id_or_name, context):
+    model = context['model']
+    session = context['session']
+    result = session.query(model.User).get(user_id_or_name)
+    if result:
+        return user_id_or_name
+    result = session.query(model.User).filter_by(name=user_id_or_name).first()
+    if not result:
+        raise Invalid('%s: %s' % (_('Not found'), _('User')))
+    return result.id
+
 def group_id_exists(group_id, context):
     """Raises Invalid if the given group_id does not exist in the model given
     in the context, otherwise returns the given group_id.
@@ -141,8 +152,10 @@ object_id_validators = {
     'new package' : package_id_exists,
     'changed package' : package_id_exists,
     'deleted package' : package_id_exists,
+    'follow dataset' : package_id_exists,
     'new user' : user_id_exists,
     'changed user' : user_id_exists,
+    'follow user' : user_id_exists,
     'new group' : group_id_exists,
     'changed group' : group_id_exists,
     'deleted group' : group_id_exists,

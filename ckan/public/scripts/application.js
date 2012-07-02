@@ -51,6 +51,24 @@ CKAN.Utils = CKAN.Utils || {};
       CKAN.DataPreview.loadEmbeddedPreview(preload_resource, reclineState);
     }
 
+    if ($(document.body).hasClass('search')) {
+      // Calculate the optimal width for the search input regardless of the
+      // width of the submit button (which can vary depending on translation).
+      (function resizeSearchInput() {
+        var form = $('#dataset-search'),
+            input = form.find('[name=q]'),
+            button = form.find('[type=submit]'),
+            offset = parseFloat(button.css('margin-left'));
+
+        // Grab the horizontal properties of the input that affect the width.
+        $.each(['padding-left', 'padding-right', 'border-left-width', 'border-right-width'], function (i, prop) {
+          offset += parseFloat(input.css(prop)) || 0;
+        });
+
+        input.width(form.outerWidth() - button.outerWidth() - offset);
+      })();
+    }
+
     var isDatasetNew = $('body.package.new').length > 0;
     if (isDatasetNew) {
       // Set up magic URL slug editor
@@ -473,7 +491,7 @@ CKAN.View.ResourceEditor = Backbone.View.extend({
 CKAN.View.Resource = Backbone.View.extend({
   initialize: function() {
     this.el = $(this.el);
-    _.bindAll(this,'updateName','updateIcon','name','askToDelete','openMyPanel','setErrors','setupDynamicExtras','addDynamicExtra', 'onDatastoreEnabledChange');
+    _.bindAll(this,'updateName','updateIcon','name','askToDelete','openMyPanel','setErrors','setupDynamicExtras','addDynamicExtra' );
     this.render();
   },
   render: function() {
@@ -508,12 +526,8 @@ CKAN.View.Resource = Backbone.View.extend({
     // Hook to open panel link
     this.li.find('.resource-open-my-panel').click(this.openMyPanel);
     this.table.find('.js-resource-edit-delete').click(this.askToDelete);
-    this.table.find('.js-datastore-enabled-checkbox').change(this.onDatastoreEnabledChange);
     // Hook to markdown editor
     CKAN.Utils.setupMarkdownEditor(this.table.find('.markdown-editor'));
-    if (resource_object.resource.webstore_url) {
-      this.table.find('.js-datastore-enabled-checkbox').prop('checked', true);
-    }
 
     // Set initial state
     this.updateName();
@@ -711,12 +725,6 @@ CKAN.View.Resource = Backbone.View.extend({
   removeFromDom: function() {
     this.li.remove();
     this.table.remove();
-  },
-  onDatastoreEnabledChange: function(e) {
-    var isChecked = this.table.find('.js-datastore-enabled-checkbox').prop('checked');
-    var webstore_url = isChecked ? 'enabled' : null;
-    this.model.set({webstore_url: webstore_url});
-    this.table.find('.js-datastore-enabled-text').val(webstore_url);
   }
 });
 
@@ -849,7 +857,6 @@ CKAN.View.ResourceAddUpload = Backbone.View.extend({
             , hash: data._checksum
             , cache_url: data._location
             , cache_url_updated: lastmod
-            , webstore_url: data._location
           }
           , {
             error: function(model, error) {
@@ -916,7 +923,6 @@ CKAN.View.ResourceAddUrl = Backbone.View.extend({
              size: data.size,
              mimetype: data.mimetype,
              last_modified: data.last_modified,
-             webstore_url: 'enabled',
              url_error: (data.url_errors || [""])[0]
            });
            self.collection.add(newResource);
@@ -926,9 +932,6 @@ CKAN.View.ResourceAddUrl = Backbone.View.extend({
      }
      else {
        newResource.set({url: urlVal, resource_type: this.options.mode});
-       if (newResource.get('resource_type')=='file') {
-         newResource.set({webstore_url: 'enabled'});
-       }
        this.collection.add(newResource);
        this.resetForm();
      }
@@ -1016,7 +1019,7 @@ CKAN.Utils = function($, my) {
 
         input_box.attr('name', new_name);
         input_box.attr('id', new_name);
-        
+
         var $new = $('<div class="ckan-dataset-to-add"><p></p></div>');
         $new.append($('<input type="hidden" />').attr('name', old_name).val(ui.item.value));
         $new.append('<i class="icon-plus-sign"></i> ');
@@ -1402,6 +1405,71 @@ CKAN.Utils = function($, my) {
     });
     return count;
   };
+
+  function followButtonClicked(event) {
+    var button = event.currentTarget;
+    if (button.id === 'user_follow_button') {
+        var object_type = 'user';
+    } else if (button.id === 'dataset_follow_button') {
+        var object_type = 'dataset';
+    }
+    else {
+        // This shouldn't happen.
+        return;
+    }
+	var object_id = button.getAttribute('data-obj-id');
+    if (button.getAttribute('data-state') === "follow") {
+        if (object_type == 'user') {
+            var url = '/api/action/follow_user';
+        } else if (object_type == 'dataset') {
+            var url = '/api/action/follow_dataset';
+        } else {
+            // This shouldn't happen.
+            return;
+        }
+        var data = JSON.stringify({
+          id: object_id
+        });
+        var nextState = 'unfollow';
+        var nextString = CKAN.Strings.unfollow;
+    } else if (button.getAttribute('data-state') === "unfollow") {
+        if (object_type == 'user') {
+            var url = '/api/action/unfollow_user';
+        } else if (object_type == 'dataset') {
+            var url = '/api/action/unfollow_dataset';
+        } else {
+            // This shouldn't happen.
+            return;
+        }
+        var data = JSON.stringify({
+          id: object_id
+        });
+        var nextState = 'follow';
+        var nextString = CKAN.Strings.follow;
+    }
+    else {
+        // This shouldn't happen.
+        return;
+    }
+    $.ajax({
+      contentType: 'application/json',
+      url: url,
+      data: data,
+      dataType: 'json',
+      processData: false,
+      type: 'POST',
+      success: function(data) {
+        button.setAttribute('data-state', nextState);
+        button.innerHTML = nextString;
+      }
+    });
+  };
+
+  // This only needs to happen on dataset pages, but it doesn't seem to do
+  // any harm to call it anyway.
+  $('#user_follow_button').on('click', followButtonClicked);
+  $('#dataset_follow_button').on('click', followButtonClicked);
+
   return my;
 }(jQuery, CKAN.Utils || {});
 
@@ -1502,6 +1570,14 @@ CKAN.DataPreview = function ($, my) {
   my.loadPreviewDialog = function(resourceData) {
     my.$dialog.html('<h4>Loading ... <img src="http://assets.okfn.org/images/icons/ajaxload-circle.gif" class="loading-spinner" /></h4>');
 
+    function showError(msg){
+      msg = msg || CKAN.Strings.errorLoadingPreview;
+      return $('#ckanext-datapreview')
+        .append('<div></div>')
+        .addClass('alert alert-error fade in')
+        .html(msg);
+    }
+
     function initializeDataExplorer(dataset) {
       var views = [
         {
@@ -1534,6 +1610,7 @@ CKAN.DataPreview = function ($, my) {
           readOnly: true
         }
       });
+
 
       // -----------------------------
       // Setup the Embed modal dialog.
@@ -1591,7 +1668,7 @@ CKAN.DataPreview = function ($, my) {
     }
 
     // 4 situations
-    // a) have a webstore_url
+    // a) webstore_url is active (something was posted to the datastore)
     // b) csv or xls (but not webstore)
     // c) can be treated as plain text
     // d) none of the above but worth iframing (assumption is
@@ -1614,14 +1691,38 @@ CKAN.DataPreview = function ($, my) {
     if (resourceData.webstore_url) {
       resourceData.elasticsearch_url = '/api/data/' + resourceData.id;
       var dataset = new recline.Model.Dataset(resourceData, 'elasticsearch');
-      initializeDataExplorer(dataset);
+      var errorMsg = CKAN.Strings.errorLoadingPreview + ': ' + CKAN.Strings.errorDataStore;
+      dataset.fetch()
+        .done(function(dataset){
+            initializeDataExplorer(dataset);
+        })
+        .fail(function(error){
+          if (error.message) errorMsg += ' (' + error.message + ')';
+          showError(errorMsg);
+        });
+
     }
     else if (resourceData.formatNormalized in {'csv': '', 'xls': ''}) {
       // set format as this is used by Recline in setting format for DataProxy
       resourceData.format = resourceData.formatNormalized;
       var dataset = new recline.Model.Dataset(resourceData, 'dataproxy');
-      initializeDataExplorer(dataset);
-      $('.recline-query-editor .text-query').hide();
+      var errorMsg = CKAN.Strings.errorLoadingPreview + ': ' +CKAN.Strings.errorDataProxy;
+      dataset.fetch()
+        .done(function(dataset){
+
+          dataset.bind('query:fail', function(error) {
+            $('#ckanext-datapreview .data-view-container').hide();
+            $('#ckanext-datapreview .header').hide();
+            $('.preview-header .btn').hide();
+          });
+
+          initializeDataExplorer(dataset);
+          $('.recline-query-editor .text-query').hide();
+        })
+        .fail(function(error){
+          if (error.message) errorMsg += ' (' + error.message + ')';
+          showError(errorMsg);
+        });
     }
     else if (resourceData.formatNormalized in {
         'rdf+xml': '',
