@@ -1,6 +1,7 @@
 import inspect
 import os
 import re
+import copy
 
 import pylons
 import paste.deploy.converters as converters
@@ -55,6 +56,12 @@ class _Toolkit(object):
         'check_ckan_version',
         'CkanVersionException',
     ]
+
+    docstrings = {
+        'asbool': 'part of paste.deploy.converters: convert strings like yes, no, true, false, 0, 1 to boolean',
+        'asint': 'part of paste.deploy.converters: convert stings to integers',
+        'aslist': 'part of paste.deploy.converters: convert string objects to a list',
+    }
 
     def __init__(self):
         self._toolkit = {}
@@ -198,8 +205,13 @@ class _Toolkit(object):
         for function_name in sorted(functions):
             fn = functions[function_name]
             if inspect.isclass(fn) and not inspect.ismethod(fn):
-                output.append('Class %s' % function_name)
-                if fn.__doc__:
+                if issubclass(fn, Exception):
+                    output.append('*exception* **%s**' % function_name)
+                else:
+                    output.append('*class* **%s**' % function_name)
+                if function_name in self.docstrings:
+                    output.append('  %s' % self.docstrings[function_name])
+                elif fn.__doc__:
                     bits = fn.__doc__.split('\n')
                     for bit in bits:
                         output.append('  %s' % bit.strip())
@@ -211,9 +223,9 @@ class _Toolkit(object):
             params = args_info.args
             num_params = len(params)
             if args_info.varargs:
-                params.append('*' + args_info.varargs)
+                params.append('\*' + args_info.varargs)
             if args_info.keywords:
-                params.append('**' + args_info.keywords)
+                params.append('\*\*' + args_info.keywords)
             if args_info.defaults:
                 offset = num_params - len(args_info.defaults)
                 for i, v in enumerate(args_info.defaults):
@@ -222,9 +234,11 @@ class _Toolkit(object):
             if inspect.ismethod(fn) and inspect.isclass(fn.__self__):
                 params = params[1:]
             params = ', '.join(params)
-            output.append('%s(%s)' % (function_name, params))
+            output.append('**%s** (*%s*)' % (function_name, params))
             # doc string
-            if fn.__doc__:
+            if function_name in self.docstrings:
+                output.append('  %s' % self.docstrings[function_name])
+            elif fn.__doc__:
                 bits = fn.__doc__.split('\n')
                 for bit in bits:
                     output.append('  %s' % bit.strip())
@@ -232,10 +246,11 @@ class _Toolkit(object):
                 output.append('  NO DOCSTRING PRESENT')
             output.append('\n')
         return ('\n').join(output)
+
     def _document(self):
+        self._initialize()
         out = 'Toolkit:\n--------\n\n'
         functions = {}
-        import copy
         functions = copy.copy(self._toolkit)
         del functions['c']
         del functions['request']
