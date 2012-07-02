@@ -1057,7 +1057,7 @@ class PluginInfo(CkanCommand):
     def toolkit(self):
         ''' print info about plugins.toolkit for documentation '''
         import ckan.plugins as p
-        path = os.path.join(os.path.dirname(__file__), '../docs/toolkit.rst')
+        path = os.path.join(os.path.dirname(__file__), '../../doc/toolkit.rst')
         f = open(path, 'w')
         f.write(p.toolkit._document())
         f.close()
