@@ -63,6 +63,20 @@ class _Toolkit(object):
         'aslist': 'part of paste.deploy.converters: convert string objects to a list',
     }
 
+    header = '''
+Toolkit
+=======
+
+To allow a safe way for extensions to interact with ckan a toolkit is provided.  We aim to keep this toolkit stable across ckan versions so that extensions will work across diferent versions of ckan.
+
+It is advised that when writing extensions that all interaction with ckan is done via the toolkit so that they do not break when new versions of ckan are released.
+
+Over time we will be expanding the functionality available via this toolkit.
+
+
+'''
+
+
     def __init__(self):
         self._toolkit = {}
 
@@ -262,7 +276,7 @@ class _Toolkit(object):
 
     def _document(self):
         self._initialize()
-        out = 'Toolkit:\n--------\n\n'
+        out = self.header
         functions = {}
         functions = copy.copy(self._toolkit)
         del functions['c']
