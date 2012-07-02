@@ -85,7 +85,6 @@ class _Toolkit(object):
         t['_'] = pylons.i18n._
         t['c'] = pylons.c
         t['request'] = pylons.request
-        t['render'] = base.render
         t['render_text'] = base.render_text
         t['asbool'] = converters.asbool
         t['asint'] = converters.asint
@@ -101,7 +100,9 @@ class _Toolkit(object):
         t['CkanCommand'] = cli.CkanCommand
 
         # class functions
+        t['render'] = self._render
         t['render_snippet'] = self._render_snippet
+        t['render_text'] = self._render_text
         t['add_template_directory'] = self._add_template_directory
         t['add_public_directory'] = self._add_public_directory
         t['requires_ckan_version'] = self._requires_ckan_version
@@ -115,11 +116,23 @@ class _Toolkit(object):
 
     # wrappers
     @classmethod
-    def _render_snippet(cls, template, data=None):
-        ''' helper for the render_snippet function as it uses keywords
-        rather than dict to pass data '''
+    def _render_snippet(cls, template_name, data=None):
+        ''' helper for the render_snippet function
+        similar to the render function. '''
         data = data or {}
-        return cls.base.render_snippet(template, **data)
+        return cls.base.render_snippet(template_name, **data)
+
+    @classmethod
+    def _render(cls, template_name, data=None):
+        ''' Main template render function. '''
+        data = data or {}
+        return cls.base.render(template_name, data)
+
+    @classmethod
+    def _render_text(cls, template_name, data=None):
+        ''' Render genshi text template. '''
+        data = data or {}
+        return cls.base.render_text(template_name, data)
 
     # new functions
     @classmethod
