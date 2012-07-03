@@ -64,15 +64,48 @@ class _Toolkit(object):
     }
 
     header = '''
-Toolkit
-=======
+Plugins Toolkit
+===============
 
-To allow a safe way for extensions to interact with ckan a toolkit is provided.  We aim to keep this toolkit stable across ckan versions so that extensions will work across diferent versions of ckan.
+To allow a safe way for extensions to interact with ckan a toolkit is
+provided. We aim to keep this toolkit stable across ckan versions so
+that extensions will work across diferent versions of ckan.
 
-It is advised that when writing extensions that all interaction with ckan is done via the toolkit so that they do not break when new versions of ckan are released.
+.. Note::
 
-Over time we will be expanding the functionality available via this toolkit.
+    It is advised that when writing extensions that all interaction with
+    ckan is done via the toolkit so that they do not break when new
+    versions of ckan are released.
 
+Over time we will be expanding the functionality available via
+this toolkit.
+
+Example extension that registers a new helper function available to
+templates via h.example_helper() ::
+
+    import ckan.plugins as p
+
+
+    class ExampleExtension(p.SingletonPlugin):
+
+        p.implements(p.IConfigurer)
+        p.implements(p.ITemplateHelpers)
+
+        def update_config(self, config):
+            # add template directory that contains our snippet
+            p.toolkit.add_template_directory(config, 'templates')
+
+        @classmethod
+        def example_helper(cls, data=None):
+            # render our custom snippet
+            return p.toolkit.render_snippet('custom_snippet.html', data)
+
+
+        def get_helpers(self):
+            # register our helper function
+            return {'example_helper': self.example_helper}
+
+The following functions, classes and exceptions are provided by the toolkit.
 
 '''
 
