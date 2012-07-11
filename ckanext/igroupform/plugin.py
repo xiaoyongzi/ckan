@@ -15,7 +15,7 @@ class ExampleIGroupFormPlugin(plugins.SingletonPlugin,
         # Tell CKAN which types of group this plugin handles.
         # Whenever a group with one of the below returned types is being used,
         # CKAN will call this plugin.
-        return ('type 1', 'type 2', 'type 3')
+        return ('Municipality', 'County', 'Citizen Group')
 
     def is_fallback(self):
         # Here we return True to tell CKAN to use this plugin as the default
@@ -38,4 +38,4 @@ class ExampleIGroupFormPlugin(plugins.SingletonPlugin,
         # Here we add the possible group types to the template context before
         # the group form is rendered. The form uses these types to create the
         # Group Type dropdown list.
-        toolkit.c.group_types = ('type 1', 'type 2', 'type 3')
+        toolkit.c.group_types = ('Municipality', 'County', 'Citizen Group')
