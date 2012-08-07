@@ -285,7 +285,9 @@ def load_environment(global_conf, app_conf):
     for msg in msgs:
         warnings.filterwarnings('ignore', msg, sqlalchemy.exc.SAWarning)
 
-    ckan_db = os.environ.get('CKAN_DB')
+    ckan_db = os.environ.get('DATABASE_URL')
+    print 'Database url'
+    print ckan_db
 
     if ckan_db:
         config['sqlalchemy.url'] = ckan_db
