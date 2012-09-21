@@ -1,6 +1,7 @@
 import logging
 from urllib import urlencode
 import datetime
+import urllib2
 
 from pylons import config
 from pylons.i18n import _
@@ -1307,6 +1308,9 @@ class PackageController(BaseController):
         try:
             c.resource = get_action('resource_show')(context,
                                                      {'id': resource_id})
+            c.resource['url'] = h.url_for(controller='package',
+                action='resource_proxy', id=id, resource_id=resource_id)
+
             c.package = get_action('package_show')(context, {'id': id})
             c.resource_json = json.dumps(c.resource)
         except NotFound:
@@ -1314,3 +1318,16 @@ class PackageController(BaseController):
         except NotAuthorized:
             abort(401, _('Unauthorized to read resource %s') % id)
         return render('package/resource_pdfpreview.html')
+
+    def resource_proxy(self, resource_id):
+        context = {'model': model, 'session': model.Session,
+                   'user': c.user or c.author}
+        resource = get_action('resource_show')(context,
+                                                     {'id': resource_id})
+        url = resource['url']
+
+        req = urllib2.urlopen(url)
+        response.headers = req.headers
+
+        import shutil
+        shutil.copyfileobj(req, response)
