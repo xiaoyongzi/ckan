@@ -70,7 +70,10 @@ def make_app(global_conf, full_stack=True, static_files=True, **app_conf):
     #app = QueueLogMiddleware(app)
 
     # Fanstatic
-    if asbool(config.get('debug', False)):
+    # The 'not' added here is a hack to make CKAN serve unminified, unbundled
+    # files even in production.
+    #if asbool(config.get('debug', False)):
+    if not asbool(config.get('debug', False)):
         fanstatic_config = {
             'versioning': True,
             'recompute_hashes': True,
@@ -82,9 +85,7 @@ def make_app(global_conf, full_stack=True, static_files=True, **app_conf):
         fanstatic_config = {
             'versioning': True,
             'recompute_hashes': False,
-            # This is a hack to serve unminified files in production.
-            #'minified': True,
-            'minified': False,
+            'minified': True,
             'bottom': True,
             'bundle': True,
         }
