@@ -82,7 +82,9 @@ def make_app(global_conf, full_stack=True, static_files=True, **app_conf):
         fanstatic_config = {
             'versioning': True,
             'recompute_hashes': False,
-            'minified': True,
+            # This is a hack to serve unminified files in production.
+            #'minified': True,
+            'minified': False,
             'bottom': True,
             'bundle': True,
         }
