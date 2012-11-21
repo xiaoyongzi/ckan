@@ -33,10 +33,7 @@ this.ckan.module('reclinepreview', function (jQuery, _) {
 
       function showError(msg){
         msg = msg || _('error loading preview');
-        return self.el
-          .append('<div></div>')
-          .addClass('alert alert-error fade in')
-          .html(msg);
+        window.parent.ckan.pubsub.publish('data-viewer-error', msg);
       }
 
       // 2 situations
