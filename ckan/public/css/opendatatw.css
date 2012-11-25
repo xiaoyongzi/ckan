@@ -2,3 +2,8 @@
 .masthead .dropdown-menu a {
     color: #333333;
 }
+
+/* Fix weird account icon position */
+.account .dropup, .dropdown {
+    position: none;
+}
