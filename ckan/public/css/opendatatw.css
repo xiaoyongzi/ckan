@@ -5,5 +5,5 @@
 
 /* Fix weird account icon position */
 .account .dropup, .dropdown {
-    position: none;
+    position: static;
 }
