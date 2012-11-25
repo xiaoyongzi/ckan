@@ -76,7 +76,7 @@ def reset():
             value = None
         # we want to store the config the first time we get here so we can
         # reset them if needed
-        config_value = config.get(key)
+        config_value = config.get(key).decode('utf-8')
         if key not in _CONFIG_CACHE:
             _CONFIG_CACHE[key] = config_value
         if value is not None:
