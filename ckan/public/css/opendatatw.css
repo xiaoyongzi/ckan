@@ -1,0 +1,4 @@
+/* Fix inviable white text by clicking profile */
+.masthead .dropdown-menu a {
+    color: #333333;
+}
