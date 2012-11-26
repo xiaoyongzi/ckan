@@ -127,7 +127,10 @@ class ApiController(base.BaseController):
     def _finish_bad_request(self, extra_msg=None):
         response_data = _('Bad request')
         if extra_msg:
-            response_data = '%s - %s' % (response_data, extra_msg)
+            response_data = '%s - %s' % (
+                response_data,
+                extra_msg.decode('utf-8')
+            )
         return self._finish(400, response_data, 'json')
 
     def _wrap_jsonp(self, callback, response_msg):
@@ -655,9 +658,7 @@ class ApiController(base.BaseController):
 
     def dataset_autocomplete(self):
         q = request.params.get('incomplete', '')
-        q_lower = q.lower()
         limit = request.params.get('limit', 10)
-        tag_names = []
         if q:
             context = {'model': model, 'session': model.Session,
                        'user': c.user or c.author}
@@ -739,7 +740,7 @@ class ApiController(base.BaseController):
         ''' translation strings for front end '''
         ckan_path = os.path.join(os.path.dirname(__file__), '..')
         source = os.path.abspath(os.path.join(ckan_path, 'public',
-                                    'base', 'i18n', '%s.js' % lang))
+                                              'base', 'i18n', '%s.js' % lang))
         response.headers['Content-Type'] = CONTENT_TYPES['json']
         if not os.path.exists(source):
             return '{}'
