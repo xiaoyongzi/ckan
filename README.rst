@@ -1,6 +1,17 @@
 CKAN: The Open Source Data Portal Software
 ==========================================
 
+Taiwan branch
+-------------
+
+This branch is originally for the community-powered data portal at `hub.opendata.tw <http://hub.opendata.tw>`_.
+
+版本為 2.0a，預設繁體中文、處理一些中文搜尋的錯誤，，由 Keith Yang 與 `NETivism <http://netivism.com.tw>`_、`青平台開放資料計畫 <http://opendata.tw>`_ 協力釋出。
+
+
+About CKAN
+----------
+
 **CKAN is the world’s leading open-source data portal platform**.
 CKAN makes it easy to publish, share and work with data. It's a data management
 system that provides a powerful platform for cataloging, storing and accessing
