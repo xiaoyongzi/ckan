@@ -68,7 +68,7 @@
 
         {% block home_tags %}
           <div class="tags">
-            <h3 class="tag">Popular {{ c.facet_titles.name }}</h3>
+            <h3 class="tag">{{ _('Popular') }} {{ c.facet_titles.name }}</h3>
             {% set tags = h.get_facet_items_dict('tags', limit=3) %}
             {% snippet 'snippets/tag_list.html', tags=tags %}
           </div>
@@ -78,9 +78,13 @@
   </div>
   <section class="hero-secondary module module-info-overlay fade-in">
     <div class="module-content">
-      <h3 class="module-heading">Add a Dataset</h3>
+      <h3 class="module-heading">{{ _('Add a Dataset') }}</h3>
       <p>
-         You can <a href="/dataset/new">add a dataset</a> to get a sense of publisher workflow. This form can be customised to require many additional fields. In this demo only the most basic fields are required. 
+      {% trans %}CKAN, is the world’s leading open-source data portal platform.  You can
+      {% endtrans %}
+      <a href="/dataset/new">{{ _('add a dataset') }}</a>
+      {% trans %} to get a sense of publisher workflow. This form can be customised to require many additional fields. In this demo only the most basic fields are required.
+      {% endtrans %}
       </p>
     </div>
     <a href="#close" class="close icon-remove-sign"></a>
