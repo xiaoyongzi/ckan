@@ -15,18 +15,6 @@
       {% endif %}
     </hgroup>
     <div class="content">
-      <nav class="section navigation">
-        <ul class="unstyled">
-          {{ h.build_nav_main(('add dataset', _('Add Dataset'), 'package_create'), ('search', _('Datasets')), ('default_group', _('Groups')), ('about', _('About'))) }}
-        </ul>
-      </nav>
-      <form class="section site-search simple-input" action="{% url_for controller='package', action='search' %}" method="get">
-        <div class="field">
-          <label for="field-sitewide-search">{{ _('Search Datasets') }}</label>
-          <input id="field-sitewide-search" name="q" placeholder="{{ _('Search') }}" />
-          <button class="btn-search" type="submit">{{ _('Search') }}</button>
-        </div>
-      </form>
       {% if c.userobj %}
         <div class="section account avatar authed" data-module="me" data-me="{{ c.userobj.id }}">
           <div class="dropdown">
@@ -75,6 +63,18 @@
           </ul>
         </nav>
       {% endif %}
+      <form class="section site-search simple-input" action="{% url_for controller='package', action='search' %}" method="get">
+        <div class="field">
+          <label for="field-sitewide-search">{{ _('Search Datasets') }}</label>
+          <input id="field-sitewide-search" name="q" placeholder="{{ _('Search') }}" />
+          <button class="btn-search" type="submit">{{ _('Search') }}</button>
+        </div>
+      </form>
+      <nav class="section navigation">
+        <ul class="unstyled">
+          {{ h.build_nav_main(('add dataset', _('Add Dataset'), 'package_create'), ('search', _('Datasets')), ('default_group', _('Groups')), ('about', _('About'))) }}
+        </ul>
+      </nav>
     </div>
   </div>
 </header>
