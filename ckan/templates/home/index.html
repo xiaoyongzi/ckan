@@ -96,5 +96,10 @@
   </div>
 {% endblock %}
 
+{% block scripts %}
+  {{ super() }}
+  <script src="/scripts/opendatatw.js"></script>
+{% endblock %}
+
 {# Remove the toolbar. #}
 {% block toolbar %}{% endblock %}
