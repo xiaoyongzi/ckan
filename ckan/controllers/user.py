@@ -315,7 +315,8 @@ class UserController(base.BaseController):
 
     def logged_in(self):
         # we need to set the language via a redirect
-        lang = session.pop('lang', None)
+        # otherwise respect the ckan.locale_default config
+        lang = session.pop('lang', i18n.get_lang())
         session.save()
         came_from = request.params.get('came_from', '')
 
